@@ -74,6 +74,7 @@ in
       export NIX_GOCACHE_OUT=$(mktemp -d)
 
       mkdir -p vendor/github.com/alecthomas
+      cp modules.txt vendor
       ln -s ${goPackages."github.com/alecthomas/kong".src} vendor/github.com/alecthomas/kong
     '';
   });
