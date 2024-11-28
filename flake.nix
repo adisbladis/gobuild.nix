@@ -14,6 +14,14 @@
 
     in
     {
+      legacyPackages = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        pkgs.callPackages ./package.nix { }
+      );
+
       devShells = forAllSystems (
         system:
         let
