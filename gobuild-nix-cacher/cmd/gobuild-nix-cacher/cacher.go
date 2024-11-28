@@ -6,7 +6,6 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"os"
 	"strconv"
@@ -17,8 +16,6 @@ import (
 )
 
 func main() {
-	flag.Parse()
-
 	dc := &cachers.DiskCache{}
 
 	// Directories containing existing build caches
@@ -36,7 +33,7 @@ func main() {
 	if dir := os.Getenv("NIX_GOCACHE_OUT"); dir != "" {
 		dc.OutDir = dir
 
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			log.Fatal(err)
 		}
 
@@ -84,5 +81,4 @@ func main() {
 	if err := p.Run(); err != nil {
 		log.Fatal(err)
 	}
-
 }

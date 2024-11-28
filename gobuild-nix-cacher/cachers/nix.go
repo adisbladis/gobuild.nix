@@ -87,7 +87,7 @@ func (dc *DiskCache) Put(ctx context.Context, actionID, objectID string, size in
 
 	// Special case empty files; they're both common and easier to do race-free.
 	if size == 0 {
-		zf, err := os.OpenFile(file, os.O_CREATE|os.O_RDWR, 0644)
+		zf, err := os.OpenFile(file, os.O_CREATE|os.O_RDWR, 0o644)
 		if err != nil {
 			return "", err
 		}
