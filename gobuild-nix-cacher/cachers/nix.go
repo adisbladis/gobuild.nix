@@ -75,7 +75,7 @@ func (dc *DiskCache) Get(ctx context.Context, actionID string) (outputID, diskPa
 	return "", "", nil
 }
 
-func (dc *DiskCache) Put(ctx context.Context, actionID, objectID string, size int64, body io.Reader) (diskPath string, _ error) {
+func (dc *DiskCache) Put(ctx context.Context, actionID, outputID string, size int64, body io.Reader) (diskPath string, _ error) {
 	dc.wg.Add(1)
 	defer dc.wg.Done()
 
@@ -83,7 +83,7 @@ func (dc *DiskCache) Put(ctx context.Context, actionID, objectID string, size in
 		return "", fmt.Errorf("received put but no output directory was set")
 	}
 
-	file := filepath.Join(dc.OutDir, fmt.Sprintf("o-%s", objectID))
+	file := filepath.Join(dc.OutDir, fmt.Sprintf("o-%s", outputID))
 
 	// Special case empty files; they're both common and easier to do race-free.
 	if size == 0 {
@@ -103,7 +103,7 @@ func (dc *DiskCache) Put(ctx context.Context, actionID, objectID string, size in
 	}
 
 	ij, err := json.Marshal(indexEntry{
-		OutputID:  objectID,
+		OutputID:  outputID,
 		Size:      size,
 		TimeNanos: dc.TimeNanos,
 	})
