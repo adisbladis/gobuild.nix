@@ -27,6 +27,8 @@ lib.makeScope newScope (
       }
     ) { };
 
+    fetchers = callPackage ./fetchers { };
+
     hooks = callPackage ./hooks { };
 
     # Go standard library.
