@@ -4,10 +4,9 @@ goBuildPhase() {
   echo "Executing goBuildPhase"
   runHook preBuild
 
-  export GO_NO_VENDOR_CHECKS=1
-  export HOME=$(mktemp -d)
+  export HOME=$TMPDIR
 
-  @go@ build -v "${goBuildPackages:-./...}"
+  @go@ build -v "${goBuildPackages:-...}"
 
   runHook postBuild
   echo "Finished executing goBuildPhase"

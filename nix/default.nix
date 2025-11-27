@@ -43,12 +43,10 @@ lib.makeScope newScope (
 
         nativeBuildInputs = [
           hooks.configureGoCache
+          hooks.configureGo
           hooks.buildGo
           hooks.buildGoCacheOutputSetupHook
         ];
-
-        # Build all packages from stdlib
-        env.goBuildPackages = "...";
       }
     ) { };
   }

@@ -1,3 +1,0 @@
-# github.com/alecthomas/kong v1.4.0
-## explicit; go 1.20
-github.com/alecthomas/kong

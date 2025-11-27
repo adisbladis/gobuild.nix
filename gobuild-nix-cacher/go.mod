@@ -1,3 +1,3 @@
-module github.com/bradfitz/go-tool-cache
+module github.com/adisbladis/gobuild.nix
 
-go 1.20
+go 1.24

@@ -20,7 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/bradfitz/go-tool-cache/wire"
+	"github.com/adisbladis/gobuild.nix/wire"
 )
 
 // Process implements the cmd/go JSON protocol over stdin & stdout via three

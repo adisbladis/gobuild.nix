@@ -4,7 +4,7 @@
       flakeLock = builtins.fromJSON (builtins.readFile ../flake.lock);
       inherit (flakeLock.nodes.nixpkgs) locked;
     in
-    import (builtins.fetchTree locked) { },
+      import (builtins.fetchTree locked) { },
 }:
 
 let
@@ -27,19 +27,60 @@ let
         pname = "golang.org/x/sys";
         version = "0.27.0";
 
-        src = fetchgit {
-          url = "https://go.googlesource.com/sys";
-          rev = "v${finalAttrs.version}";
-          hash = "sha256-+d5AljNfSrDuYxk3qCRw4dHkYVELudXJEh6aN8BYPhM=";
+        src = fetchModuleProxy {
+          goPackagePath = finalAttrs.pname;
+          version = "v${finalAttrs.version}";
+          hash = "sha256-nEoB8+Ti+4cNoCVL09shr77C9GSehFgTFJbbU3AFf/U=";
         };
 
         nativeBuildInputs = [
-          hooks.configureGoCache
-          hooks.buildGo
-          hooks.buildGoCacheOutputSetupHook
+          hooks.goModuleHook
+        ];
+      })
+    ) { };
+
+    "github.com/alecthomas/assert/v2" = callPackage (
+      {
+        stdenv,
+        hooks,
+      }: stdenv.mkDerivation (finalAttrs: {
+        pname = "github.com/alecthomas/assert/v2";
+        version = "2.11.0";
+
+        src = fetchModuleProxy {
+          goPackagePath = finalAttrs.pname;
+          version = "v${finalAttrs.version}";
+          hash = "sha256-u4hJQUW2Wh4eh9uEpjwEJNEvzo3WB9oJSBgc50BNPqw=";
+        };
+
+        nativeBuildInputs = [
+          hooks.goModuleHook
         ];
 
-        buildInputs = [ final.std ];
+        propagatedBuildInputs = [
+          goPackages."github.com/alecthomas/repr"
+          goPackages."github.com/hexops/gotextdiff"
+        ];
+      })
+    ) { };
+
+    "github.com/alecthomas/repr" = callPackage (
+      {
+        stdenv,
+        hooks,
+      }: stdenv.mkDerivation (finalAttrs: {
+        pname = "github.com/alecthomas/repr";
+        version = "0.5.2";
+
+        src = fetchModuleProxy {
+          goPackagePath = finalAttrs.pname;
+          version = "v${finalAttrs.version}";
+          hash = "sha256-Wnr0ZxfffuES1HICEC1i0AZ+WOZdOcANeGfEWJkmLr0=";
+        };
+
+        nativeBuildInputs = [
+          hooks.goModuleHook
+        ];
       })
     ) { };
 
@@ -48,28 +89,46 @@ let
         stdenv,
         hooks,
         fetchFromGitHub,
+        goPackages,
       }:
-      stdenv.mkDerivation {
+      stdenv.mkDerivation (finalAttrs: {
         pname = "github.com/alecthomas/kong";
         version = "1.4.0";
 
-        src = fetchFromGitHub {
-          owner = "alecthomas";
-          repo = "kong";
-          rev = "v1.4.0";
-          hash = "sha256-xfjPNqMa5Qtah4vuSy3n0Zn/G7mtufKlOiTzUemzFcQ=";
+        src = fetchModuleProxy {
+          goPackagePath = finalAttrs.pname;
+          version = "v${finalAttrs.version}";
+          hash = "sha256-xOYhjQFvdqsecF//ztyUoRQVyVbSfubbQbMFfKUI2kw=";
         };
 
         nativeBuildInputs = [
-          hooks.configureGoCache
-          hooks.buildGo
-          hooks.buildGoCacheOutputSetupHook
+          hooks.goModuleHook
         ];
 
-        buildInputs = [
-          final.std
+        propagatedBuildInputs = [
+          goPackages."github.com/alecthomas/assert/v2"
         ];
-      }
+      })
+    ) { };
+
+    "github.com/hexops/gotextdiff" = callPackage (
+      {
+        stdenv,
+        hooks,
+      }: stdenv.mkDerivation (finalAttrs: {
+        pname = "github.com/hexops/gotextdiff";
+        version = "1.0.3";
+
+        src = fetchModuleProxy {
+          goPackagePath = finalAttrs.pname;
+          version = "v${finalAttrs.version}";
+          hash = "sha256-PQ5UI9aRbt7n90ptsS3fs00AfGDiS5Kaxm5OJrjwwo0=";
+        };
+
+        nativeBuildInputs = [
+          hooks.goModuleHook
+        ];
+      })
     ) { };
 
     "github.com/fsnotify/fsnotify" = callPackage (
@@ -78,46 +137,25 @@ let
         hooks,
         fetchFromGitHub,
         goPackages,
-
       }:
-      let
-        sys = goPackages."golang.org/x/sys";
-      in
-      stdenv.mkDerivation {
+      stdenv.mkDerivation (finalAttrs: {
         pname = "github.com/fsnotify/fsnotify";
         version = "1.8.0";
 
-        src = fetchFromGitHub {
-          owner = "fsnotify";
-          repo = "fsnotify";
-          rev = "v1.8.0";
-          hash = "sha256-+Rxg5q17VaqSU1xKPgurq90+Z1vzXwMLIBSe5UsyI/M=";
+        src = fetchModuleProxy {
+          goPackagePath = "github.com/fsnotify/fsnotify";
+          version = "v1.8.0";
+          hash = "sha256-xuryvUHfpiQbFPpl2bSJM0Au17RYrZmlAdK6W3KO9Wc=";
         };
 
         nativeBuildInputs = [
-          hooks.configureGoCache
-          hooks.buildGo
-          hooks.buildGoCacheOutputSetupHook
+          hooks.goModuleHook
         ];
 
-        buildInputs = [
-          sys
-          final.std
+        propagatedBuildInputs = [
+          goPackages."golang.org/x/sys"
         ];
-
-        # TODO: Move vendor setup to hook
-        preBuild = ''
-          mkdir -p vendor/golang.org/x
-          ln -s ${sys.src} vendor/golang.org/x/sys
-
-          cat > vendor/modules.txt<<EOF
-          # golang.org/x/sys v0.13.0
-          ## explicit; go 1.20
-          golang.org/x/sys
-          EOF
-
-        '';
-      }
+      })
     ) { };
   });
 
@@ -126,6 +164,9 @@ in
   inherit goPackages;
 
   sys = goPackages."golang.org/x/sys";
+  fs = goPackages."github.com/fsnotify/fsnotify";
+  kong = goPackages."github.com/alecthomas/kong";
+  inherit (goPackages) std;
 
   fsnotify =
     let
@@ -135,26 +176,19 @@ in
       pname = "fsnotify";
       inherit (base) version src;
 
-      preBuild =
-        base.preBuild
-        + ''
-          export NIX_GOBUILD_CACHE_OUT=$(mktemp -d)
-        '';
-
-      buildInputs = [
-        goPackages.std
-        goPackages."golang.org/x/sys"
+      # TODO: Reasonable default behaviour
+      # Note: Always required when building from Go module proxy directory
+      goInstallPackages = [
+        "github.com/fsnotify/fsnotify/cmd/fsnotify"
       ];
 
-      nativeBuildInputs =
-        let
-          inherit (goPackages) hooks;
-        in
-        [
-          hooks.configureGoCache
-          hooks.buildGo
-          hooks.installGo
-        ];
+      buildInputs = [
+        base
+      ];
+
+      nativeBuildInputs = [
+        goPackages.hooks.goAppHook
+      ];
     };
 
   simple-package = pkgs.stdenv.mkDerivation (finalAttrs: {
@@ -162,27 +196,12 @@ in
 
     src = ./fixtures/simple-package;
 
-    nativeBuildInputs =
-      let
-        inherit (goPackages) hooks;
-      in
-      [
-        hooks.configureGoCache
-        hooks.buildGo
-        hooks.installGo
-      ];
+    nativeBuildInputs = [
+      goPackages.hooks.goAppHook
+    ];
 
     buildInputs = [
       goPackages."github.com/alecthomas/kong"
-      goPackages.std
     ];
-
-    preBuild = ''
-      export NIX_GOBUILD_CACHE_OUT=$(mktemp -d)
-
-      mkdir -p vendor/github.com/alecthomas
-      cp modules.txt vendor
-      ln -s ${goPackages."github.com/alecthomas/kong".src} vendor/github.com/alecthomas/kong
-    '';
   });
 }
