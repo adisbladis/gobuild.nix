@@ -15,6 +15,7 @@ let
   # Overriden with additional packages
   goPackages = goPackages'.overrideScope (final: prev: let
     inherit (final) callPackage;
+    inherit (final.fetchers) fetchModuleProxy;
   in {
     "golang.org/x/sys" = callPackage (
       {
@@ -37,6 +38,8 @@ let
           hooks.buildGo
           hooks.buildGoCacheOutputSetupHook
         ];
+
+        buildInputs = [ final.std ];
       })
     ) { };
 
@@ -45,7 +48,6 @@ let
         stdenv,
         hooks,
         fetchFromGitHub,
-        std,
       }:
       stdenv.mkDerivation {
         pname = "github.com/alecthomas/kong";
@@ -65,7 +67,7 @@ let
         ];
 
         buildInputs = [
-          std
+          final.std
         ];
       }
     ) { };
@@ -100,9 +102,8 @@ let
 
         buildInputs = [
           sys
+          final.std
         ];
-
-        # cp ${finalAttrs.src}/modules.txt vendor/modules.txt
 
         # TODO: Move vendor setup to hook
         preBuild = ''
@@ -124,6 +125,8 @@ in
 {
   inherit goPackages;
 
+  sys = goPackages."golang.org/x/sys";
+
   fsnotify =
     let
       base = goPackages."github.com/fsnotify/fsnotify";
@@ -139,7 +142,7 @@ in
         '';
 
       buildInputs = [
-        # base
+        goPackages.std
         goPackages."golang.org/x/sys"
       ];
 
