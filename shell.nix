@@ -7,24 +7,15 @@
     import (builtins.fetchTree locked) { },
 }:
 
-let
-
-  # Go package set containing build cache output & hooks
-  goPackages = pkgs.callPackage ./go-pkgs.nix {
-    # Override Go with cache experiment (not required for 1.24+)
-    go = pkgs.go.overrideAttrs (old: {
-      env.GOEXPERIMENT = "cacheprog";
-    });
-  };
-
-  cacher = goPackages.gobuild-nix-cacher;
-
-in
+# Note: Commented out lines below are for dogfooding of using Nix provided
+# caches in development.
+# I'm commenting this out for now to have more freedom to break things,
+# but once we're more stabilised I'm putting it back.
 
 pkgs.mkShell {
   packages = [
-    goPackages.go
-    cacher
+    pkgs.go
+    # cacher
   ];
 
   env = {
