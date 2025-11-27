@@ -7,7 +7,7 @@ goBuildPhase() {
   export GO_NO_VENDOR_CHECKS=1
   export HOME=$(mktemp -d)
 
-  @go@ build -v ./...
+  @go@ build -v "${goBuildPackages:-./...}"
 
   runHook postBuild
   echo "Finished executing goBuildPhase"
