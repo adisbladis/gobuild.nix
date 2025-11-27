@@ -1,70 +1,21 @@
 {
-  go,
-  newScope,
-  lib,
+  pkgs ?
+    let
+      flakeLock = builtins.fromJSON (builtins.readFile ../flake.lock);
+      inherit (flakeLock.nodes.nixpkgs) locked;
+    in
+    import (builtins.fetchTree locked) { },
 }:
-lib.makeScope newScope (
-  final:
-  let
+
+let
+
+  # Go package set containing build cache output & hooks
+  goPackages' = pkgs.callPackages ../nix { };
+
+  # Overriden with additional packages
+  goPackages = goPackages'.overrideScope (final: prev: let
     inherit (final) callPackage;
-  in
-  {
-    # Tooling
-
-    inherit go;
-
-    goPackages = final;
-
-    gobuild-nix-cacher = callPackage (
-      { stdenv, hooks }:
-      stdenv.mkDerivation {
-        name = "gobuild-nix-cacher";
-        src = ./gobuild-nix-cacher;
-        nativeBuildInputs = [
-          hooks.buildGo
-          hooks.installGo
-        ];
-        meta.mainProgram = "gobuild-nix-cacher";
-      }
-    ) { };
-
-    hooks = callPackage ./hooks { };
-
-    # Go standard library.
-    # This needs to be built in a bit of a special way as it's not structured like a regular Go module.
-    "std" = callPackage (
-      {
-        stdenv,
-        hooks,
-        go,
-      }:
-      stdenv.mkDerivation {
-        inherit (go) pname version;
-        dontUnpack = true;
-
-        nativeBuildInputs = [
-          go
-          hooks.configureGoCache
-          hooks.buildGoCacheOutputSetupHook
-        ];
-
-        buildPhase = ''
-          runHook preBuild
-
-          # TODO: Move to configure hook
-          export GO_NO_VENDOR_CHECKS=1
-          export HOME=$(mktemp -d)
-
-          # Perform build of all stdlib packages
-          go list ... | xargs -I {} sh -c "go build {} || true"
-
-          runHook postBuild
-        '';
-      }
-    ) { };
-
-    # Packages
-
+  in {
     "golang.org/x/sys" = callPackage (
       {
         stdenv,
@@ -167,5 +118,68 @@ lib.makeScope newScope (
         '';
       }
     ) { };
-  }
-)
+  });
+
+in
+{
+  inherit goPackages;
+
+  fsnotify =
+    let
+      base = goPackages."github.com/fsnotify/fsnotify";
+    in
+    pkgs.stdenv.mkDerivation {
+      pname = "fsnotify";
+      inherit (base) version src;
+
+      preBuild =
+        base.preBuild
+        + ''
+          export NIX_GOCACHE_OUT=$(mktemp -d)
+        '';
+
+      buildInputs = [
+        # base
+        goPackages."golang.org/x/sys"
+      ];
+
+      nativeBuildInputs =
+        let
+          inherit (goPackages) hooks;
+        in
+        [
+          hooks.configureGoCache
+          hooks.buildGo
+          hooks.installGo
+        ];
+    };
+
+  simple-package = pkgs.stdenv.mkDerivation (finalAttrs: {
+    name = "simple-package";
+
+    src = ./fixtures/simple-package;
+
+    nativeBuildInputs =
+      let
+        inherit (goPackages) hooks;
+      in
+      [
+        hooks.configureGoCache
+        hooks.buildGo
+        hooks.installGo
+      ];
+
+    buildInputs = [
+      goPackages."github.com/alecthomas/kong"
+      goPackages.std
+    ];
+
+    preBuild = ''
+      export NIX_GOCACHE_OUT=$(mktemp -d)
+
+      mkdir -p vendor/github.com/alecthomas
+      cp modules.txt vendor
+      ln -s ${goPackages."github.com/alecthomas/kong".src} vendor/github.com/alecthomas/kong
+    '';
+  });
+}
