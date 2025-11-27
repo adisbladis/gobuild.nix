@@ -16,7 +16,10 @@ var CLI struct {
 }
 
 func main() {
-  ctx := kong.Parse(&CLI)
+	ctx := kong.Parse(&CLI)
+
+
+
   switch ctx.Command() {
   case "rm <path>":
   case "ls":

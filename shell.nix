@@ -6,7 +6,6 @@
     in
     import (builtins.fetchTree locked) { },
 }:
-
 # Note: Commented out lines below are for dogfooding of using Nix provided
 # caches in development.
 # I'm commenting this out for now to have more freedom to break things,
@@ -18,8 +17,8 @@ pkgs.mkShell {
     # cacher
   ];
 
-  env = {
-    GOEXPERIMENT = "cacheprog";
-    # GOCACHEPROG = pkgs.lib.getExe cacher;
-  };
+  # env = {
+  #   GOEXPERIMENT = "cacheprog";
+  #   # GOCACHEPROG = pkgs.lib.getExe cacher;
+  # };
 }

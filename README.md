@@ -39,12 +39,6 @@ Having a central set which we can patch could make many older compiler pins unne
   - Each package needs to record it's build inputs, now they're all grouped into a single hash
   - Much more
 
-## TODO
-
-- [ ] Pre-build Go stdlib
-
-Currently the stdlib isn't pre-compiled, and stdlib cache ends up in whatever derivations first touch those code paths.
-
 ## Questions
 
 - Can `buildGoModule` gain caching?

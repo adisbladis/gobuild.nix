@@ -30,6 +30,39 @@ lib.makeScope newScope (
 
     hooks = callPackage ./hooks { };
 
+    # Go standard library.
+    # This needs to be built in a bit of a special way as it's not structured like a regular Go module.
+    "std" = callPackage (
+      {
+        stdenv,
+        hooks,
+        go,
+      }:
+      stdenv.mkDerivation {
+        inherit (go) pname version;
+        dontUnpack = true;
+
+        nativeBuildInputs = [
+          go
+          hooks.configureGoCache
+          hooks.buildGoCacheOutputSetupHook
+        ];
+
+        buildPhase = ''
+          runHook preBuild
+
+          # TODO: Move to configure hook
+          export GO_NO_VENDOR_CHECKS=1
+          export HOME=$(mktemp -d)
+
+          # Perform build of all stdlib packages
+          go list ... | xargs -I {} sh -c "go build {} || true"
+
+          runHook postBuild
+        '';
+      }
+    ) { };
+
     # Packages
 
     "golang.org/x/sys" = callPackage (
@@ -61,6 +94,7 @@ lib.makeScope newScope (
         stdenv,
         hooks,
         fetchFromGitHub,
+        std,
       }:
       stdenv.mkDerivation {
         pname = "github.com/alecthomas/kong";
@@ -77,6 +111,10 @@ lib.makeScope newScope (
           hooks.configureGoCache
           hooks.buildGo
           hooks.buildGoCacheOutputSetupHook
+        ];
+
+        buildInputs = [
+          std
         ];
       }
     ) { };

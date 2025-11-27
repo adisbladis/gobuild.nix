@@ -63,6 +63,7 @@ in
 
     buildInputs = [
       goPackages."github.com/alecthomas/kong"
+      goPackages.std
     ];
 
     preBuild = ''
