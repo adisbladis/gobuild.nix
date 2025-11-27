@@ -3,7 +3,6 @@ echo "Sourcing configure-go-cache-hook"
 goConfigureCache() {
   echo "Executing goConfigureCache"
 
-  # TODO: Make configurable
   if [ -z "${NIX_GOCACHE_OUT-}" ]; then
     export NIX_GOCACHE_OUT="$out"
   fi
