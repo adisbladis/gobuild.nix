@@ -8,7 +8,6 @@ goConfigureCache() {
   fi
 
   export NIX_GOCACHE_VERBOSE="1"
-  export GOEXPERIMENT="cacheprog"
   export GOCACHEPROG=@cacher@
 
   echo "Finished executing goConfigureCache"
