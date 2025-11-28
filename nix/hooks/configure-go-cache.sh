@@ -7,7 +7,6 @@ goConfigureCache() {
     export NIX_GOBUILD_CACHE_OUT="$out"
   fi
 
-  export NIX_GOBUILD_CACHE_VERBOSE="1"
   export GOCACHEPROG=@cacher@
 
   echo "Finished executing goConfigureCache"

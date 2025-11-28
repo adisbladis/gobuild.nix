@@ -64,10 +64,8 @@ func main() {
 	var p *cacheproc.Process
 	p = &cacheproc.Process{
 		Close: func() error {
-			if dc.Verbose {
-				log.Printf("cacher: closing; %d gets (%d hits, %d misses, %d errors); %d puts (%d errors)",
-					p.Gets.Load(), p.GetHits.Load(), p.GetMisses.Load(), p.GetErrors.Load(), p.Puts.Load(), p.PutErrors.Load())
-			}
+			log.Printf("gobuild-nix-cacher: closing; %d gets (%d hits, %d misses, %d errors); %d puts (%d errors)",
+				p.Gets.Load(), p.GetHits.Load(), p.GetMisses.Load(), p.GetErrors.Load(), p.Puts.Load(), p.PutErrors.Load())
 
 			// Wait for in-flight writes to finish
 			dc.Wait()
