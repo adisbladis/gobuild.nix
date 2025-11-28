@@ -22,7 +22,7 @@ type indexEntry struct {
 
 type DiskCache struct {
 	// Cache input directories.
-	// Normally from NIX_GOCACHE
+	// Normally from NIX_GOBUILD_CACHE
 	InputDirs []string
 
 	// Cache output directory path.

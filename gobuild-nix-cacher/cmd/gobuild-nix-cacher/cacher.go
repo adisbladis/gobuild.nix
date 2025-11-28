@@ -19,7 +19,7 @@ func main() {
 	dc := &cachers.DiskCache{}
 
 	// Directories containing existing build caches
-	if s := os.Getenv("NIX_GOCACHE"); s != "" {
+	if s := os.Getenv("NIX_GOBUILD_CACHE"); s != "" {
 		dirs := strings.Split(s, ":")
 
 		dc.InputDirs = dirs
@@ -30,7 +30,7 @@ func main() {
 	}
 
 	// Output build cache
-	if dir := os.Getenv("NIX_GOCACHE_OUT"); dir != "" {
+	if dir := os.Getenv("NIX_GOBUILD_CACHE_OUT"); dir != "" {
 		dc.OutDir = dir
 
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -53,7 +53,7 @@ func main() {
 	}
 
 	// Output build cache
-	if s := os.Getenv("NIX_GOCACHE_VERBOSE"); s != "" {
+	if s := os.Getenv("NIX_GOBUILD_CACHE_VERBOSE"); s != "" {
 		i, err := strconv.Atoi(s)
 		if err != nil {
 			log.Fatal(err)

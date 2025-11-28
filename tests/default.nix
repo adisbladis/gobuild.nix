@@ -138,7 +138,7 @@ in
       preBuild =
         base.preBuild
         + ''
-          export NIX_GOCACHE_OUT=$(mktemp -d)
+          export NIX_GOBUILD_CACHE_OUT=$(mktemp -d)
         '';
 
       buildInputs = [
@@ -178,7 +178,7 @@ in
     ];
 
     preBuild = ''
-      export NIX_GOCACHE_OUT=$(mktemp -d)
+      export NIX_GOBUILD_CACHE_OUT=$(mktemp -d)
 
       mkdir -p vendor/github.com/alecthomas
       cp modules.txt vendor
