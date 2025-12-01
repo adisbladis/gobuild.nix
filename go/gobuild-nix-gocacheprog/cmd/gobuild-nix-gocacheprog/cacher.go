@@ -10,9 +10,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
-
-	"github.com/adisbladis/gobuild.nix/cacheproc"
-	"github.com/adisbladis/gobuild.nix/cachers"
+	"github.com/adisbladis/gobuild.nix/go/gobuild-nix-gocacheprog/cacheproc"
+	"github.com/adisbladis/gobuild.nix/go/gobuild-nix-gocacheprog/cachers"
 )
 
 func main() {

@@ -14,16 +14,16 @@ lib.makeScope newScope (
 
     goPackages = final;
 
-    gobuild-nix-cacher = callPackage (
+    gobuild-nix-gocacheprog = callPackage (
       { stdenv, hooks }:
       stdenv.mkDerivation {
-        name = "gobuild-nix-cacher";
-        src = ../gobuild-nix-cacher;
+        name = "gobuild-nix-gocacheprog";
+        src = ../go/gobuild-nix-gocacheprog;
         nativeBuildInputs = [
           hooks.buildGo
           hooks.installGo
         ];
-        meta.mainProgram = "gobuild-nix-cacher";
+        meta.mainProgram = "gobuild-nix-gocacheprog";
       }
     ) { };
 

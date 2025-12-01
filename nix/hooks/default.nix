@@ -2,7 +2,7 @@
   callPackage,
   makeSetupHook,
   go,
-  gobuild-nix-cacher,
+  gobuild-nix-gocacheprog,
   lib,
   lndir,
 }:
@@ -28,7 +28,7 @@ in
     makeSetupHook {
       name = "configure-go-cache-hook";
       substitutions = {
-        cacher = lib.getExe gobuild-nix-cacher;
+        gocacheprog = lib.getExe gobuild-nix-gocacheprog;
         go = goExe;
       };
     } ./configure-go-cache.sh
