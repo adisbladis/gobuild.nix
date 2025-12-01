@@ -18,14 +18,19 @@ import (
 func main() {
 	dc := &cachers.DiskCache{}
 
+	// Remove timestamps & extra info from logging
+	log.SetFlags(0)
+	log.SetPrefix("gobuild.nix: ")
+
 	// Directories containing existing build caches
 	if s := os.Getenv("NIX_GOBUILD_CACHE"); s != "" {
 		dirs := strings.Split(s, ":")
 
 		dc.InputDirs = dirs
 
+		log.Printf("Using cache inputs:")
 		for _, dir := range dirs {
-			log.Printf("Using cache input dir %v ...", dir)
+			log.Printf("%v ...", dir)
 		}
 	}
 
@@ -39,7 +44,7 @@ func main() {
 
 		dc.InputDirs = append(dc.InputDirs, dir)
 
-		log.Printf("Using cache output dir %v ...", dir)
+		log.Printf("Using cache output: %v ...", dir)
 	}
 
 	// Timestamp
@@ -64,7 +69,7 @@ func main() {
 	var p *cacheproc.Process
 	p = &cacheproc.Process{
 		Close: func() error {
-			log.Printf("gobuild-nix-cacher: closing; %d gets (%d hits, %d misses, %d errors); %d puts (%d errors)",
+			log.Printf("closing; %d gets (%d hits, %d misses, %d errors); %d puts (%d errors)",
 				p.Gets.Load(), p.GetHits.Load(), p.GetMisses.Load(), p.GetErrors.Load(), p.Puts.Load(), p.PutErrors.Load())
 
 			// Wait for in-flight writes to finish
