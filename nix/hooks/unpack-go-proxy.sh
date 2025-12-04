@@ -47,7 +47,7 @@ goUnpackProxyPhase() {
   find ../.gobuild-proxy -name '@v' -type d -prune | while read modProxyDir; do
       local depGoPackagePath=$(echo "$modProxyDir"  | sed 's#\..\/.gobuild-proxy\/##; s#\/@v$##')
       while read depVersion; do
-          echo "require $depGoPackagePath $depVersion // indirect" >> go.mod
+          echo "require $depGoPackagePath $depVersion" >> go.mod
           go mod download "$depGoPackagePath"
       done < "$modProxyDir/list"
   done

@@ -7,8 +7,10 @@
   lndir,
 }:
 let
-
   goExe = lib.getExe go;
+
+  build-go-proxy-output = callPackage ./build-go-proxy-output { };
+
 in
 
 {
@@ -80,6 +82,7 @@ in
       name = "build-go-proxy-output-setup-hook";
       substitutions = {
         go = goExe;
+        proxybuilder = lib.getExe build-go-proxy-output;
       };
     } ./build-go-proxy-output-setup-hook.sh
   ) { };

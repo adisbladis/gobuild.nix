@@ -166,7 +166,7 @@ in
   sys = goPackages."golang.org/x/sys";
   fs = goPackages."github.com/fsnotify/fsnotify";
   kong = goPackages."github.com/alecthomas/kong";
-  inherit (goPackages) std;
+  inherit (goPackages) std build-go-proxy-output;
 
   fsnotify =
     let
