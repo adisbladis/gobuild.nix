@@ -203,8 +203,6 @@ func common(directory string) (*lockFile, error) {
 		})
 	}
 
-	eg.Wait()
-
 	return lock, eg.Wait()
 }
 
