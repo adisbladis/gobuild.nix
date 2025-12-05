@@ -8,6 +8,11 @@ goConfigurePhase() {
   # This hook mainly exists to opt out of the default nixpkgs
   # configurePhase behaviour.
 
+  # Go commands needs a working home directory
+  if [ -z "${HOME}" ] || [ "${HOME}" = "/homeless-shelter" ] ; then
+    export HOME=$TMPDIR
+  fi
+
   runHook postConfigure
   echo "Finished executing goConfigurePhase"
 }

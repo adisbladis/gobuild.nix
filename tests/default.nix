@@ -166,7 +166,8 @@ in
   sys = goPackages."golang.org/x/sys";
   fs = goPackages."github.com/fsnotify/fsnotify";
   kong = goPackages."github.com/alecthomas/kong";
-  inherit (goPackages) std build-go-proxy-output;
+  inherit (goPackages) std;
+  inherit (goPackages.hooks) gobuild-nix-tool;
 
   fsnotify =
     let
@@ -175,17 +176,9 @@ in
     pkgs.stdenv.mkDerivation {
       pname = "fsnotify";
       inherit (base) version src;
-
-      # TODO: Reasonable default behaviour
-      # Note: Always required when building from Go module proxy directory
-      goInstallPackages = [
-        "github.com/fsnotify/fsnotify/cmd/fsnotify"
-      ];
-
       buildInputs = [
         base
       ];
-
       nativeBuildInputs = [
         goPackages.hooks.goAppHook
       ];
@@ -193,13 +186,10 @@ in
 
   simple-package = pkgs.stdenv.mkDerivation (finalAttrs: {
     name = "simple-package";
-
     src = ./fixtures/simple-package;
-
     nativeBuildInputs = [
       goPackages.hooks.goAppHook
     ];
-
     buildInputs = [
       goPackages."github.com/alecthomas/kong"
     ];

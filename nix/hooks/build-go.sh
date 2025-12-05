@@ -6,7 +6,7 @@ goBuildPhase() {
 
   export HOME=$TMPDIR
 
-  @go@ build -v "${goBuildPackages:-...}"
+  @tool@ buildGo
 
   runHook postBuild
   echo "Finished executing goBuildPhase"

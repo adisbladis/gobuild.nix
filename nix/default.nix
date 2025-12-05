@@ -20,12 +20,21 @@ lib.makeScope newScope (
         name = "gobuild-nix-gocacheprog";
         src = ../go/gobuild-nix-gocacheprog;
         nativeBuildInputs = [
-          hooks.buildGo
-          hooks.installGo
+          go
         ];
+
+        installPhase = ''
+          runHook preInstall
+          export HOME=$TMPDIR
+          env GOMAXPROCS=$NIX_BUILD_CORES GOBIN="$out/bin" go install -v ./...
+          runHook postInstall
+        '';
+
         meta.mainProgram = "gobuild-nix-gocacheprog";
       }
     ) { };
+
+    gobuild-nix-tool = callPackage ./hooks/gobuild-nix-tool { };
 
     fetchers = callPackage ./fetchers { };
 
@@ -41,11 +50,14 @@ lib.makeScope newScope (
         inherit (go) pname version;
         dontUnpack = true;
 
+        goBuildPackages = "...";
+
         nativeBuildInputs = [
           hooks.configureGoCache
           hooks.configureGo
           hooks.buildGo
           hooks.buildGoCacheOutputSetupHook
+          go
         ];
       }
     ) { };

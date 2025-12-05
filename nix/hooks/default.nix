@@ -9,20 +9,22 @@
 let
   goExe = lib.getExe go;
 
-  build-go-proxy-output = callPackage ./build-go-proxy-output { };
+  gobuild-nix-tool = callPackage ./gobuild-nix-tool { };
+  tool = lib.getExe gobuild-nix-tool;
 
 in
 
 {
-  unpackGoProxy = callPackage (
+  inherit gobuild-nix-tool;
+
+  unpackGo = callPackage (
     { }:
     makeSetupHook {
-      name = "unpack-go-proxy-hook";
+      name = "unpack-go-hook";
       substitutions = {
-        go = goExe;
-        lndir = lib.getExe lndir;
+        inherit tool;
       };
-    } ./unpack-go-proxy.sh
+    } ./unpack-go.sh
   ) { };
 
   configureGoCache = callPackage (
@@ -52,6 +54,7 @@ in
       name = "build-go-hook";
       substitutions = {
         go = goExe;
+        inherit tool;
       };
     } ./build-go.sh
   ) { };
@@ -62,6 +65,7 @@ in
       name = "install-go-hook";
       substitutions = {
         go = goExe;
+        inherit tool;
       };
     } ./install-go.sh
   ) { };
@@ -70,21 +74,17 @@ in
     { }:
     makeSetupHook {
       name = "build-go-cache-output-setup-hook";
-      substitutions = {
-        go = goExe;
-      };
     } ./build-go-cache-output-setup-hook.sh
   ) { };
 
-  buildGoProxyOutputSetupHook = callPackage (
+  buildGoModCacheOutputSetupHook = callPackage (
     { }:
     makeSetupHook {
-      name = "build-go-proxy-output-setup-hook";
+      name = "build-go-modcache-output-setup-hook";
       substitutions = {
-        go = goExe;
-        proxybuilder = lib.getExe build-go-proxy-output;
+        inherit tool;
       };
-    } ./build-go-proxy-output-setup-hook.sh
+    } ./build-go-modcache-setup-hook.sh
   ) { };
 
   goModuleHook = callPackage
@@ -98,12 +98,12 @@ in
           propagatedBuildInputs = [
             go
             std
-            hooks.unpackGoProxy
+            hooks.unpackGo
             hooks.configureGo
             hooks.configureGoCache
             hooks.buildGo
             hooks.buildGoCacheOutputSetupHook
-            hooks.buildGoProxyOutputSetupHook
+            hooks.buildGoModCacheOutputSetupHook
           ];
         } ./module-hook.sh
     )
@@ -121,7 +121,7 @@ in
           propagatedBuildInputs = [
             go
             std
-            hooks.unpackGoProxy
+            hooks.unpackGo
             hooks.configureGo
             hooks.configureGoCache
             # Note that explicitly calling `go build` is not required.

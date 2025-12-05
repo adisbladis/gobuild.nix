@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 
 	"golang.org/x/mod/modfile"
 	"golang.org/x/sync/errgroup"
@@ -37,6 +38,7 @@ type goPackageLock struct {
 // Map goPackagePath -> lock entry
 type lockFile struct {
 	Schema int                       `json:"schema"`
+	Cycles map[string]int            `json:"cycles,omitempty"`
 	Locked map[string]*goPackageLock `json:"locked"`
 }
 
@@ -77,15 +79,17 @@ func common(directory string) (*lockFile, error) {
 		// log.Info("Done downloading dependencies")
 	}
 
+	var lockMux sync.Mutex
 	lock := &lockFile{
 		Schema: SCHEMA_VERSION,
 		Locked: make(map[string]*goPackageLock),
+		Cycles: make(map[string]int),
 	}
 
 	eg := errgroup.Group{}
 	eg.SetLimit(10)
 	for _, download := range modDownloads {
-		download := download
+		// download := download
 		eg.Go(func() error {
 			var require []string
 			{
@@ -99,15 +103,12 @@ func common(directory string) (*lockFile, error) {
 					return err // TODO: Wrap with context
 				}
 
+				// Note: You might be tempted to filter out indirect dependencies
+				// but this is not possible because some dependencies may be incorrectly declared
+				// as indirect when they are in fact direct.
 				for _, modRequire := range mod.Require {
-					if !modRequire.Indirect {
-						require = append(require, modRequire.Mod.Path)
-					}
+					require = append(require, modRequire.Mod.Path)
 				}
-				// require = make([]string, len(mod.Require))
-				// for i, modRequire := range mod.Require {
-				// 	require[i] = modRequire.Mod.Path
-				// }
 			}
 
 			cmd := exec.Command(
@@ -120,8 +121,6 @@ func common(directory string) (*lockFile, error) {
 				return fmt.Errorf("cmd.Output() failed with %s\n", err)
 			}
 			drvPath := strings.TrimSpace(string(output))
-			// panic(nil)
-			// cmd.Dir = directory
 
 			cmd = exec.Command(
 				"nix-store", "-r", drvPath,
@@ -193,17 +192,30 @@ func common(directory string) (*lockFile, error) {
 
 			cmd.Wait()
 
+			lockMux.Lock()
 			lock.Locked[download.Path] = &goPackageLock{
 				Version: download.Version,
 				Hash:    hash,
 				Require: require,
 			}
+			lockMux.Unlock()
 
 			return nil
 		})
 	}
 
-	return lock, eg.Wait()
+	err := eg.Wait()
+	if err != nil {
+		return nil, err
+	}
+
+	for i, cycle := range findAllCycles(lock.Locked) {
+		for _, depGoPackagePath := range cycle {
+			lock.Cycles[depGoPackagePath] = i
+		}
+	}
+
+	return lock, nil
 }
 
 func main() {
@@ -227,6 +239,4 @@ func main() {
 		fmt.Printf("Error writing to file: %v\n", err)
 		return
 	}
-
-	fmt.Println(string(lockJson))
 }

@@ -6,12 +6,12 @@
 package main
 
 import (
+	"github.com/adisbladis/gobuild.nix/go/gobuild-nix-gocacheprog/cacheproc"
+	"github.com/adisbladis/gobuild.nix/go/gobuild-nix-gocacheprog/cachers"
 	"log"
 	"os"
 	"strconv"
 	"strings"
-	"github.com/adisbladis/gobuild.nix/go/gobuild-nix-gocacheprog/cacheproc"
-	"github.com/adisbladis/gobuild.nix/go/gobuild-nix-gocacheprog/cachers"
 )
 
 func main() {
@@ -21,15 +21,26 @@ func main() {
 	log.SetFlags(0)
 	log.SetPrefix("gobuild.nix: ")
 
+	// Output build cache
+	if s := os.Getenv("NIX_GOBUILD_CACHE_VERBOSE"); s != "" {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			log.Fatal(err)
+		}
+		dc.Verbose = i > 0
+	}
+
 	// Directories containing existing build caches
 	if s := os.Getenv("NIX_GOBUILD_CACHE"); s != "" {
 		dirs := strings.Split(s, ":")
 
 		dc.InputDirs = dirs
 
-		log.Printf("Using cache inputs:")
-		for _, dir := range dirs {
-			log.Printf("%v ...", dir)
+		if dc.Verbose {
+			log.Printf("Using cache inputs:")
+			for _, dir := range dirs {
+				log.Printf("%v ...", dir)
+			}
 		}
 	}
 
@@ -43,7 +54,9 @@ func main() {
 
 		dc.InputDirs = append(dc.InputDirs, dir)
 
-		log.Printf("Using cache output: %v ...", dir)
+		if dc.Verbose {
+			log.Printf("Using cache output: %v ...", dir)
+		}
 	}
 
 	// Timestamp
@@ -53,22 +66,15 @@ func main() {
 			log.Fatal(err)
 		}
 		dc.TimeNanos = i * 1_000_000_000
-		log.Printf("Using cache timestamp %v ...", dc.TimeNanos)
-	}
-
-	// Output build cache
-	if s := os.Getenv("NIX_GOBUILD_CACHE_VERBOSE"); s != "" {
-		i, err := strconv.Atoi(s)
-		if err != nil {
-			log.Fatal(err)
+		if dc.Verbose {
+			log.Printf("Using cache timestamp %v ...", dc.TimeNanos)
 		}
-		dc.Verbose = i > 0
 	}
 
 	var p *cacheproc.Process
 	p = &cacheproc.Process{
 		Close: func() error {
-			log.Printf("closing; %d gets (%d hits, %d misses, %d errors); %d puts (%d errors)",
+			log.Printf("closing cache; %d gets (%d hits, %d misses, %d errors); %d puts (%d errors)",
 				p.Gets.Load(), p.GetHits.Load(), p.GetMisses.Load(), p.GetErrors.Load(), p.Puts.Load(), p.PutErrors.Load())
 
 			// Wait for in-flight writes to finish
