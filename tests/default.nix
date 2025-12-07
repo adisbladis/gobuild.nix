@@ -161,14 +161,6 @@ let
 
 in
 {
-  inherit goPackages;
-
-  sys = goPackages."golang.org/x/sys";
-  fs = goPackages."github.com/fsnotify/fsnotify";
-  kong = goPackages."github.com/alecthomas/kong";
-  inherit (goPackages) std;
-  inherit (goPackages.hooks) gobuild-nix-tool;
-
   fsnotify =
     let
       base = goPackages."github.com/fsnotify/fsnotify";

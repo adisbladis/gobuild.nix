@@ -14,12 +14,30 @@
 
     in
     {
-      legacyPackages = forAllSystems (
+      packages = forAllSystems (
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
         in
-        pkgs.callPackages ./package.nix { }
+        {
+          gobuild-nix-generate = pkgs.callPackage ./go/gobuild-nix-generate {
+            gobuild-nix = self.lib;
+          };
+          generate = self.packages.${system}.gobuild-nix-generate;
+        }
+      );
+
+      lib = import ./default.nix;
+
+      checks = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        import ./tests { inherit pkgs; }
+        // {
+          inherit (self.packages.${system}) gobuild-nix-generate;
+        }
       );
 
       devShells = forAllSystems (
