@@ -4,19 +4,26 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 
+	"github.com/BurntSushi/toml"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/sync/errgroup"
+
+	_ "embed"
 )
 
 const SCHEMA_VERSION = 1
+const LOCK_FILE = "gobuild-nix.lock"
 
 type goModDownload struct {
 	Path     string
@@ -30,28 +37,52 @@ type goModDownload struct {
 }
 
 type goPackageLock struct {
-	Version string   `json:"version"`
-	Hash    string   `json:"hash"`
-	Require []string `json:"require,omitempty"`
+	Version string   `toml:"version"`
+	Hash    string   `toml:"hash"`
+	Require []string `toml:"require,omitempty"`
 }
 
 // Map goPackagePath -> lock entry
 type lockFile struct {
-	Schema int                       `json:"schema"`
-	Cycles map[string]int            `json:"cycles,omitempty"`
-	Locked map[string]*goPackageLock `json:"locked"`
+	Schema int                       `toml:"schema"`
+	Cycles map[string]int            `toml:"cycles,omitempty"`
+	Locked map[string]*goPackageLock `toml:"locked"`
 }
 
-func common(directory string) (*lockFile, error) {
-	// goModPath := filepath.Join(directory, "go.mod")
+func filter[T any](slice []T, predicate func(T) bool) []T {
+	var result []T
+	for _, v := range slice {
+		if predicate(v) {
+			result = append(result, v)
+		}
+	}
+	return result
+}
 
-	// log.WithFields(log.Fields{
-	// 	"modPath": goModPath,
-	// }).Info("Parsing go.mod")
+//go:embed fetcher.nix
+var fetcherExpr string
+
+func createLock(directory string, workers int, pkgsFlag string, attrFlag string) (*lockFile, error) {
+	// If we have a previous lock file re-use hashes instead of re-computing them if the package/version is the same
+	prevHashes := make(map[string]string)
+	if _, err := os.Stat(filepath.Join(directory, LOCK_FILE)); err == nil {
+		contents, err := os.ReadFile(filepath.Join(directory, LOCK_FILE))
+		if err != nil {
+			return nil, fmt.Errorf("error reading previous lockfile: %w", err)
+		}
+
+		prevLock := &lockFile{}
+		err = toml.Unmarshal(contents, prevLock)
+		if err == nil { // If we're erroring out it's probably a schema change, just consider it a cache miss
+			for goPackagePath, locked := range prevLock.Locked {
+				prevHashes[fmt.Sprintf("%s@%s", goPackagePath, locked.Version)] = locked.Hash
+			}
+		}
+	}
 
 	var modDownloads []*goModDownload
 	{
-		// log.Info("Downloading dependencies")
+		log.Println("Downloading dependencies")
 
 		cmd := exec.Command(
 			"go", "mod", "download", "--json",
@@ -76,7 +107,7 @@ func common(directory string) (*lockFile, error) {
 			modDownloads = append(modDownloads, dl)
 		}
 
-		// log.Info("Done downloading dependencies")
+		log.Println("Done downloading dependencies")
 	}
 
 	var lockMux sync.Mutex
@@ -86,10 +117,11 @@ func common(directory string) (*lockFile, error) {
 		Cycles: make(map[string]int),
 	}
 
+	expr := fmt.Sprintf("(with import %s { }; callPackage (%s) { go = pkgs.\"%s\"; }).fetchModuleProxy", pkgsFlag, fetcherExpr, attrFlag)
+
 	eg := errgroup.Group{}
-	eg.SetLimit(10)
+	eg.SetLimit(workers)
 	for _, download := range modDownloads {
-		// download := download
 		eg.Go(func() error {
 			var require []string
 			{
@@ -111,86 +143,88 @@ func common(directory string) (*lockFile, error) {
 				}
 			}
 
-			cmd := exec.Command(
-				// TODO: Embed
-				"nix-instantiate", "--expr", "((import <nixpkgs> { }).callPackage /home/adisbladis/sauce/github.com/adisbladis/gobuild.nix/nix/fetchers/default.nix { }).fetchModuleProxy", "--argstr", "goPackagePath", download.Path, "--argstr", "version", download.Version,
-			)
-			output, err := cmd.Output()
-			if err != nil {
-				fmt.Println(cmd)
-				return fmt.Errorf("cmd.Output() failed with %s\n", err)
-			}
-			drvPath := strings.TrimSpace(string(output))
+			hash, ok := prevHashes[fmt.Sprintf("%s@%s", download.Path, download.Version)]
+			if !ok {
+				log.Printf("Fetching %s", download.Path)
 
-			cmd = exec.Command(
-				"nix-store", "-r", drvPath,
-			)
+				cmd := exec.Command(
+					"nix-instantiate", "--expr", expr, "--argstr", "goPackagePath", download.Path, "--argstr", "version", download.Version,
+				)
+				output, err := cmd.Output()
+				if err != nil {
+					return fmt.Errorf("cmd.Output() failed with %s\n", err)
+				}
+				drvPath := strings.TrimSpace(string(output))
 
-			stdoutPipe, err := cmd.StderrPipe()
-			if err != nil {
-				return fmt.Errorf("Error getting StdoutPipe: %w", err)
-			}
-
-			err = cmd.Start()
-			if err != nil {
-				return fmt.Errorf("Error starting command: %w", err)
-			}
-
-			var hash string
-			scanner := bufio.NewScanner(stdoutPipe)
-			{
-				// Text finder state
-				const (
-					Looking       int = iota // Didn't find anything yet
-					HashMismatch             // Found hash mismatch
-					SpecifiedHash            // Found specified hash
-					ActualHash               // Found actual hash
+				cmd = exec.Command(
+					"nix-store", "-r", drvPath,
 				)
 
-				finderState := Looking
+				stderrPipe, err := cmd.StderrPipe()
+				if err != nil {
+					return fmt.Errorf("Error getting StdoutPipe: %w", err)
+				}
 
-				// Find hash mismatch line
+				err = cmd.Start()
+				if err != nil {
+					return fmt.Errorf("Error starting command: %w", err)
+				}
+
+				scanner := bufio.NewScanner(stderrPipe)
 				{
-					gotRe := regexp.MustCompile(" +got: +(.+)$")
-				Scanner:
-					for scanner.Scan() {
-						line := scanner.Bytes()
-						switch finderState {
-						case Looking:
-							if bytes.HasPrefix(line, []byte("error: hash mismatch in fixed-output")) {
-								finderState = HashMismatch
-							}
-						case HashMismatch:
-							found, err := regexp.Match(" +specified: +.+$", line)
-							if err != nil {
-								return err
-							}
+					// Text finder state
+					const (
+						Looking       int = iota // Didn't find anything yet
+						HashMismatch             // Found hash mismatch
+						SpecifiedHash            // Found specified hash
+						ActualHash               // Found actual hash
+					)
 
-							if found {
-								finderState = SpecifiedHash
-							}
-						case SpecifiedHash:
-							match := gotRe.FindSubmatch(line)
-							if len(match) == 0 {
-								continue
-							}
+					finderState := Looking
 
-							hash = string(match[1])
-						case ActualHash:
-							break Scanner
+					// Find hash mismatch line
+					{
+						gotRe := regexp.MustCompile(" +got: +(.+)$")
+					Scanner:
+						for scanner.Scan() {
+							line := scanner.Bytes()
+							switch finderState {
+							case Looking:
+								if bytes.HasPrefix(line, []byte("error: hash mismatch in fixed-output")) {
+									finderState = HashMismatch
+								}
+							case HashMismatch:
+								found, err := regexp.Match(" +specified: +.+$", line)
+								if err != nil {
+									return err
+								}
+
+								if found {
+									finderState = SpecifiedHash
+								}
+							case SpecifiedHash:
+								match := gotRe.FindSubmatch(line)
+								if len(match) == 0 {
+									continue
+								}
+
+								hash = string(match[1])
+							case ActualHash:
+								break Scanner
+							}
 						}
 					}
+					if finderState != SpecifiedHash {
+						return fmt.Errorf("Hash mismatch pattern not found in stream")
+					}
 				}
-				if finderState != SpecifiedHash {
-					return fmt.Errorf("Hash mismatch pattern not found in stream")
+
+				if err := scanner.Err(); err != nil {
+					fmt.Println("Error reading from stdout:", err)
 				}
-			}
 
-			if err := scanner.Err(); err != nil {
-				fmt.Println("Error reading from stdout:", err)
+				cmd.Wait()
 			}
-
-			cmd.Wait()
 
 			lockMux.Lock()
 			lock.Locked[download.Path] = &goPackageLock{
@@ -209,6 +243,18 @@ func common(directory string) (*lockFile, error) {
 		return nil, err
 	}
 
+	// The require list contains modules that are not
+	// in our graph.
+	// These are optional dependencies not used by the module we're generating for.
+	//
+	// Filter out unsatisfied requirements
+	for _, locked := range lock.Locked {
+		locked.Require = filter(locked.Require, func(requirement string) bool {
+			_, ok := lock.Locked[requirement]
+			return ok
+		})
+	}
+
 	for i, cycle := range findAllCycles(lock.Locked) {
 		for _, depGoPackagePath := range cycle {
 			lock.Cycles[depGoPackagePath] = i
@@ -219,24 +265,32 @@ func common(directory string) (*lockFile, error) {
 }
 
 func main() {
+	var pkgsFlag = flag.String("f", "<nixpkgs>", "path to custom nixpkgs used for prefetching")
+	var jobsFlag = flag.Int("j", 10, "number of max concurrent prefetching jobs")
+	var attrFlag = flag.String("a", "go", "go attribute to use for prefetching")
+
+	flag.Parse()
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
 
-	lock, err := common(cwd)
+	lock, err := createLock(cwd, *jobsFlag, *pkgsFlag, *attrFlag)
 	if err != nil {
 		panic(err)
 	}
 
-	lockJson, err := json.MarshalIndent(lock, "", "  ")
+	lockContents, err := toml.Marshal(lock)
 	if err != nil {
 		panic(err)
 	}
 
-	err = os.WriteFile("gobuild-nix.lock", lockJson, os.FileMode(0644))
+	err = os.WriteFile(LOCK_FILE, lockContents, os.FileMode(0644))
 	if err != nil {
 		fmt.Printf("Error writing to file: %v\n", err)
 		return
 	}
+
+	log.Printf("Wrote %s", LOCK_FILE)
 }

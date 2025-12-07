@@ -1,0 +1,12 @@
+schema = 1
+
+[locked]
+  [locked."github.com/BurntSushi/toml"]
+    version = "v1.5.0"
+    hash = "sha256-SyKVqkZQopsYprjWCVssulTGQ/NUrrztdzsl02Bsg7Q="
+  [locked."golang.org/x/mod"]
+    version = "v0.30.0"
+    hash = "sha256-dEjRvA/ak+JgGyfQ3jzMc/uiznogPtqv2j+C6xJASqU="
+  [locked."golang.org/x/sync"]
+    version = "v0.18.0"
+    hash = "sha256-Zm4eHAVpxplyeLW55l6JYcHFEEZgfp8WMQt5+Q7LF8o="

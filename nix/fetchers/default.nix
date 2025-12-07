@@ -7,10 +7,24 @@
   go,
   curl,
   runCommand,
+  writeScript,
 }:
 
 let
   impureEnvVars = lib.fetchers.proxyImpureEnvVars ++ [ "GOPROXY" ];
+
+  # This is embedded into the expression so the expression can be embedded into the generator program
+  fetchModuleProxy = writeScript "fetch-module-proxy.sh" ''
+    source $stdenv/setup
+
+    export HOME=$TMPDIR
+    export GOMODCACHE=$out
+    export GOPROXY=''${GOPROXY:-https://proxy.golang.org}
+    export GOSUMDB=off
+
+    go mod download "''${goPackagePath}@''${version}"
+  '';
+
 in
 {
   fetchModuleProxy =
@@ -21,7 +35,7 @@ in
     }:
     stdenvNoCC.mkDerivation {
       name = "${baseNameOf goPackagePath}_${version}";
-      builder = ./fetch-module-proxy.sh;
+      builder = fetchModuleProxy;
       inherit goPackagePath version impureEnvVars;
       nativeBuildInputs = [
         cacert
