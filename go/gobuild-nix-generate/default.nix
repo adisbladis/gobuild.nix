@@ -1,6 +1,6 @@
 { gobuild-nix, callPackage, stdenv }:
 let
-  goSet = callPackage gobuild-nix.mkGoSet {
+  goSet = callPackage gobuild-nix.lib.mkGoSet {
     goLock = ./gobuild-nix.lock;
   };
 in

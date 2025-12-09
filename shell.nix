@@ -14,6 +14,7 @@
 pkgs.mkShell {
   packages = [
     pkgs.go
+    pkgs.mdbook
     # cacher
   ];
 

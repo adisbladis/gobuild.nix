@@ -12,6 +12,8 @@
 
       forAllSystems = lib.genAttrs lib.systems.flakeExposed;
 
+      # Import non-flake API
+      self' = import self { };
     in
     {
       packages = forAllSystems (
@@ -19,15 +21,12 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
         in
-        {
-          gobuild-nix-generate = pkgs.callPackage ./go/gobuild-nix-generate {
-            gobuild-nix = self.lib;
-          };
-          generate = self.packages.${system}.gobuild-nix-generate;
-        }
+          self'.packages {
+            inherit (pkgs) callPackage;
+          }
       );
 
-      lib = import ./default.nix;
+      inherit (self') lib;
 
       checks = forAllSystems (
         system:
