@@ -28,6 +28,11 @@
 
       inherit (self') lib;
 
+      templates.default = {
+        path = ./template;
+        description = "A minimal example of using gobuild.nix for development";
+      };
+
       checks = forAllSystems (
         system:
         let

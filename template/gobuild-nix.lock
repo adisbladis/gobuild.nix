@@ -1,0 +1,7 @@
+schema = 1
+require = ["golang.org/x/mod"]
+
+[locked]
+  [locked."golang.org/x/mod"]
+    version = "v0.31.0"
+    hash = "sha256-2SaC1k7GjvhfdFoLr9sdNUQKKxuYYaaUJMEpW9itoEM="
