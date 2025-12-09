@@ -75,10 +75,13 @@ let
                 );
 
             # Map goPackagePath -> cycle package
-            cyclePkgs = mapAttrs (goPackagePath: cycleGroup: cyclesByGroup.${toString cycleGroup}) cycles;
+            cyclePkgs = mapAttrs (goPackagePath: cycleGroup: cyclesByGroup.${toString cycleGroup}) final.cycles;
 
           in
-          mapAttrs (
+          {
+            inherit cycles;
+          }
+          // mapAttrs (
             goPackagePath: locked:
             cyclePkgs.${goPackagePath} or (final.callPackage (
               {
