@@ -21,8 +21,10 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
         in
-          self'.packages {
+          (self'.packages {
             inherit (pkgs) callPackage;
+          }) // {
+            doc = pkgs.callPackage ./doc { };
           }
       );
 

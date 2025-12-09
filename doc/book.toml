@@ -1,0 +1,14 @@
+[book]
+authors = ["adisbladis"]
+language = "en"
+multilingual = false
+src = "src"
+title = "gobuild.nix"
+
+[output.html]
+git-repository-url = "https://github.com/adisbladis/gobuild.nix"
+git-branch = "master"
+open-on-text = """
+<hr style="margin-top: 5em;" />
+Found an issue? [Edit this page on GitHub.]
+"""
