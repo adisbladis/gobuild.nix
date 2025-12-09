@@ -61,7 +61,7 @@ let
                         let
                           locked = lockFile.locked.${goPackagePath};
                         in
-                        concatMap (req: if elem req cycle || !final ? ${req} then [ ] else [ final.${req} ]) (
+                        concatMap (req: if elem req cycle then [ ] else [ final.${req} ]) (
                           locked.require or [ ]
                         )
                       ) cycle;
