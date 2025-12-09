@@ -1,5 +1,10 @@
 # Usage
 
+This segment is also available as a Flake template:
+```
+nix flake init --template github:adisbladis/gobuild.nix
+```
+
 ## Generating a lock file
 
 To generate a lock file run
@@ -12,6 +17,7 @@ This will download dependencies & process the dependency graph to output `gobuil
 
 ## Make a derivation
 
+- `default.nix`
 ```nix
 { gobuild-nix, callPackage, stdenv }:
 let
@@ -30,6 +36,18 @@ stdenv.mkDerivation {
   nativeBuildInputs = [
     # goSet.goAppHook implements build behaviour for Go applications
     goSet.hooks.goAppHook
+  ];
+}
+```
+
+## Create a development shell
+
+- `shell.nix`
+```nix
+mkShell {
+  packages = [
+    go
+    gobuild-nix-generate
   ];
 }
 ```
