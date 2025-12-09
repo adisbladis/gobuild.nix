@@ -85,7 +85,7 @@ let
           }
           // mapAttrs (
             goPackagePath: locked:
-            cyclePkgs.${goPackagePath} or (final.callPackage (
+            final.cycles.${goPackagePath} or (final.callPackage (
               {
                 stdenv,
                 fetchers,
