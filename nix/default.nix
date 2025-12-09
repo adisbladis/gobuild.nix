@@ -17,27 +17,7 @@ lib.makeScope newScope (
 
     goPackages = final;
 
-    gobuild-nix-gocacheprog = callPackage (
-      { stdenv, hooks }:
-      stdenv.mkDerivation {
-        name = "gobuild-nix-gocacheprog";
-        src = ../go/gobuild-nix-gocacheprog;
-        nativeBuildInputs = [
-          go
-        ];
-
-        installPhase = ''
-          runHook preInstall
-          export HOME=$TMPDIR
-          env GOMAXPROCS=$NIX_BUILD_CORES GOBIN="$out/bin" go install -v ./...
-          runHook postInstall
-        '';
-
-        meta.mainProgram = "gobuild-nix-gocacheprog";
-      }
-    ) { };
-
-    gobuild-nix-tool = callPackage ./hooks/gobuild-nix-tool { };
+    gobuild-nix-gocacheprog = callPackage ../go/gobuild-nix-gocacheprog { };
 
     fetchers = callPackage ./fetchers { };
 
