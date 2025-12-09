@@ -12,6 +12,9 @@ lib.makeScope newScope (
     # Tooling
     inherit go;
 
+    # Empty initial list of require's until overriden by generated overlay
+    require = [ ];
+
     goPackages = final;
 
     gobuild-nix-gocacheprog = callPackage (

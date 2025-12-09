@@ -80,6 +80,8 @@ let
           in
           {
             inherit cycles;
+
+            require = map (packagePath: final.${packagePath}) lockFile.require;
           }
           // mapAttrs (
             goPackagePath: locked:

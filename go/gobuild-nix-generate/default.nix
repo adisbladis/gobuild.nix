@@ -10,11 +10,7 @@ stdenv.mkDerivation {
   postUnpack = ''
     cp ${../../nix/fetchers/default.nix} fetcher.nix
   '';
-  buildInputs = [
-    goSet."github.com/BurntSushi/toml"
-    goSet."golang.org/x/mod"
-    goSet."golang.org/x/sync"
-  ];
+  buildInputs = goSet.require;
   nativeBuildInputs = [
     goSet.hooks.goAppHook
   ];

@@ -44,9 +44,10 @@ type goPackageLock struct {
 
 // Map goPackagePath -> lock entry
 type lockFile struct {
-	Schema int                       `toml:"schema"`
-	Cycles map[string]int            `toml:"cycles,omitempty"`
-	Locked map[string]*goPackageLock `toml:"locked"`
+	Schema  int                       `toml:"schema"`
+	Cycles  map[string]int            `toml:"cycles,omitempty"`
+	Locked  map[string]*goPackageLock `toml:"locked"`
+	Require []string                  `toml:"require"`
 }
 
 func filter[T any](slice []T, predicate func(T) bool) []T {
@@ -122,6 +123,8 @@ func createLock(directory string, workers int, pkgsFlag string, attrFlag string)
 	eg := errgroup.Group{}
 	eg.SetLimit(workers)
 	for _, download := range modDownloads {
+		lock.Require = append(lock.Require, download.Path)
+
 		eg.Go(func() error {
 			var require []string
 			{
