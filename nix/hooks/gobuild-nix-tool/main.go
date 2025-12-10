@@ -219,6 +219,10 @@ func listGoPackages(envvar string) ([]string, error) {
 		GoFiles    []string
 	}
 
+	// All packages currently being built
+	goPackagePaths := map[string]struct{}{}
+
+	// Recursively list packages
 	var listPackages []string
 	{
 		goPackagesString, ok := os.LookupEnv(envvar)
@@ -235,6 +239,7 @@ func listGoPackages(envvar string) ([]string, error) {
 			{
 				i := 0
 				for _, mod := range proxyMods {
+					goPackagePaths[mod.Module.Mod.Path] = struct{}{}
 					listPackages[i] = mod.Module.Mod.Path + "/..."
 					i++
 				}
@@ -246,7 +251,6 @@ func listGoPackages(envvar string) ([]string, error) {
 		}
 	}
 
-	var goPackagePaths []string
 	{
 		args := append([]string{"list", "-e", "-json"}, listPackages...)
 		{
@@ -273,7 +277,7 @@ func listGoPackages(envvar string) ([]string, error) {
 				}
 
 				if pkg.GoFiles != nil {
-					goPackagePaths = append(goPackagePaths, pkg.ImportPath)
+					goPackagePaths[pkg.ImportPath] = struct{}{}
 				}
 			}
 
@@ -283,7 +287,10 @@ func listGoPackages(envvar string) ([]string, error) {
 		}
 	}
 
-	return goPackagePaths, nil
+	packagePaths := slices.Collect(maps.Keys(goPackagePaths))
+	slices.Sort(packagePaths)
+
+	return packagePaths, nil
 }
 
 func buildGoCmd() error {
