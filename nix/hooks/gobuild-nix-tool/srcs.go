@@ -10,7 +10,7 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
-func copyDir(src, dst string, replacements map[string]string) error {
+func copyDir(src, dst string, modGlob string, replacements map[string]string) error {
 	stat, err := os.Stat(src)
 	if err != nil {
 		return fmt.Errorf("failed to stat source: %w", err)
@@ -25,7 +25,7 @@ func copyDir(src, dst string, replacements map[string]string) error {
 	errChan := make(chan error, 1)
 	var errOnce sync.Once
 
-	err = copyDirRecursive(src, dst, sem, &wg, errChan, &errOnce, replacements)
+	err = copyDirRecursive(src, dst, sem, &wg, errChan, &errOnce, modGlob, replacements)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func copyDir(src, dst string, replacements map[string]string) error {
 	return nil
 }
 
-func copyFile(src, dst string, replacements map[string]string) error {
+func copyFile(src, dst string, modGlob string, replacements map[string]string) error {
 	base := filepath.Base(src)
 	if base == "go.sum" || base == "go.work.sum" { // Don't copy go.sum, they're not usable for us
 		return nil
@@ -62,7 +62,12 @@ func copyFile(src, dst string, replacements map[string]string) error {
 		// 	return fmt.Errorf("failed to symlink %s -> %s: %w", src, dst, err)
 		// }
 	} else {
-		if filepath.Base(src) == "go.mod" {
+		isMod, err := filepath.Match(modGlob, filepath.Base(src))
+		if err != nil {
+			return err
+		}
+
+		if isMod {
 			// Replace go.mod versions with build input versions
 			contents, err := os.ReadFile(src)
 			if err != nil {
@@ -109,7 +114,7 @@ func copyFile(src, dst string, replacements map[string]string) error {
 	return nil
 }
 
-func copyDirRecursive(src, dst string, sem chan struct{}, wg *sync.WaitGroup, errChan chan error, errOnce *sync.Once, replacements map[string]string) error {
+func copyDirRecursive(src, dst string, sem chan struct{}, wg *sync.WaitGroup, errChan chan error, errOnce *sync.Once, modGlob string, replacements map[string]string) error {
 	err := os.MkdirAll(dst, 0777)
 	if err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
@@ -124,7 +129,7 @@ func copyDirRecursive(src, dst string, sem chan struct{}, wg *sync.WaitGroup, er
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 		if entry.IsDir() {
-			err = copyDirRecursive(srcPath, dstPath, sem, wg, errChan, errOnce, replacements)
+			err = copyDirRecursive(srcPath, dstPath, sem, wg, errChan, errOnce, modGlob, replacements)
 			if err != nil {
 				return err
 			}
@@ -134,7 +139,7 @@ func copyDirRecursive(src, dst string, sem chan struct{}, wg *sync.WaitGroup, er
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-				if err := copyFile(src, dst, replacements); err != nil {
+				if err := copyFile(src, dst, modGlob, replacements); err != nil {
 					errOnce.Do(func() {
 						errChan <- err
 					})

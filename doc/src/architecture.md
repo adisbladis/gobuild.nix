@@ -35,7 +35,7 @@ In practice however many Go packages do not do this and have direct dependencies
 
 This means we always have to write out all dependencies to the lock.
 
-### Symlink farming of `GOMODCACHE`
+### Patching of `go.mod` & Symlink farming of `GOMODCACHE`
 
 When creating the module cache directory all `*.mod` files have to be patched & all `go.sum` files have to be omitted from the file tree.
 
@@ -45,3 +45,10 @@ So one symlink per input file is created when unpacking the module cache.
 This approach causes a downstream knock-on effect which is that Go embed statements don't consider files that are symlinks.
 
 That's why `gobuild.nix` unpacks the module cache using a hybrid approach: create one symlink per source file & copy every non-Go file in full.
+
+### Deeply nested indirect dependencies
+
+Because we're building each package in isolation and go.sum doesn't hold the full dependency graph, only the that your application/library cares about.
+Without including deeply nested indirect dependencies an application build will fail because the Go compiler needs to be able to look up metadata about it's dependencies, even if those are not required to actually perform the build.
+
+Therefore the lock file generator discovers additional deeply nested dependencies not present in `go.sum` during generation.

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -15,7 +16,6 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	"github.com/adisbladis/gobuild.nix/nix/hooks/gobuild-nix-tool/modcache"
 	"github.com/adisbladis/gobuild.nix/nix/hooks/gobuild-nix-tool/parexec"
 )
 
@@ -27,11 +27,7 @@ const MODCACHE_DIR = "go/pkg/mod"
 var nixBuildCores int = 4 // Default value, set in main()
 
 func isGoProxyDir(dir string) bool {
-	_, err := os.Lstat(filepath.Join(dir, "go.mod"))
-	if err == nil {
-		return false
-	}
-	_, err = os.Lstat(filepath.Join(dir, "cache", "download"))
+	_, err := os.Lstat(filepath.Join(dir, "cache", "download"))
 	return err == nil
 }
 
@@ -60,6 +56,49 @@ func getProxySrcs() ([]string, error) {
 	}
 
 	return srcs, nil
+}
+
+func findGoproxyMods(goProxyDir string) ([]string, error) {
+	var goMods []string
+
+	var recurse func(string) error
+	recurse = func(rootDir string) error {
+		files, err := os.ReadDir(rootDir)
+		if err != nil {
+			return err
+		}
+
+		for _, file := range files {
+			switch file.Name() {
+			case "@v":
+				matches, err := filepath.Glob(filepath.Join(rootDir, file.Name(), "*.mod"))
+				if err != nil {
+					return err
+				}
+
+				for _, match := range matches {
+					goMods = append(goMods, match)
+				}
+			default:
+				path := filepath.Join(rootDir, file.Name())
+				info, err := os.Lstat(path)
+				if err != nil {
+					return err
+				}
+
+				if info.IsDir() {
+					err = recurse(path)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		return nil
+	}
+
+	return goMods, recurse(goProxyDir)
 }
 
 // Get gobuild.nix GOMODCACHE directories
@@ -101,41 +140,6 @@ func getSrcProxies() []string {
 	return srcs
 }
 
-// Find & read all mod files from $proxy/cache/download
-func loadGoproxyModfiles(goProxyDir string) (map[string]*modfile.File, error) {
-	modfiles := map[string]*modfile.File{}
-
-	executor := parexec.NewParExecutor(nixBuildCores)
-	var mux sync.Mutex
-
-	proxyMods, err := modcache.FindGoproxyMods(goProxyDir)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, modFilePath := range proxyMods {
-		executor.Go(func() error {
-
-			contents, err := os.ReadFile(modFilePath)
-			if err != nil {
-				return err
-			}
-
-			mod, err := modfile.Parse(modFilePath, contents, nil)
-			if err != nil {
-				return err
-			}
-
-			mux.Lock()
-			modfiles[modFilePath] = mod
-			mux.Unlock()
-			return nil
-		})
-	}
-
-	return modfiles, executor.Wait()
-}
-
 func replaceDependencyVersion(modfile *modfile.File, replacements map[string]string) {
 	for _, require := range modfile.Require {
 		localVersion, ok := replacements[require.Mod.Path]
@@ -175,6 +179,20 @@ func fileExists(filename string) bool {
 	return err == nil
 }
 
+func readMod(path string) (*modfile.File, error) {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	mod, err := modfile.Parse(path, contents, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return mod, nil
+}
+
 // Find & read all proxy mod files from dependencies we're directly building _only_
 func loadSrcProxiesModfiles() (map[string]*modfile.File, error) {
 	modfiles := map[string]*modfile.File{}
@@ -185,18 +203,13 @@ func loadSrcProxiesModfiles() (map[string]*modfile.File, error) {
 	srcProxies := getSrcProxies()
 	for _, downloadDir := range srcProxies {
 		executor.Go(func() error {
-			proxyMods, err := modcache.FindGoproxyMods(downloadDir)
+			proxyMods, err := findGoproxyMods(downloadDir)
 			if err != nil {
 				return err
 			}
 
 			for _, modFilePath := range proxyMods {
-				contents, err := os.ReadFile(modFilePath)
-				if err != nil {
-					return err
-				}
-
-				mod, err := modfile.Parse(modFilePath, contents, nil)
+				mod, err := readMod(modFilePath)
 				if err != nil {
 					return err
 				}
@@ -350,36 +363,34 @@ func buildModCacheOutputSetupHook() error {
 		return fmt.Errorf("No 'out' environment variable set")
 	}
 	nixSupport := filepath.Join(out, "nix-support")
+	modCacheDir := filepath.Join(nixSupport, "gobuild-nix", "mod")
 
 	srcs, err := getProxySrcs()
 	if err != nil {
 		return err
 	}
 
-	// Any directory containing a cache/download directory is a Go modules directory
-	var goModCacheDirs []string
-	{
-		var dirMux sync.Mutex
-		executor := parexec.NewParExecutor(nixBuildCores)
-		for _, srcDir := range srcs {
-			executor.Go(func() error {
-				if fileExists(filepath.Join(srcDir, "cache", "download")) {
-					dirMux.Lock()
-					goModCacheDirs = append(goModCacheDirs, srcDir)
-					dirMux.Unlock()
-				}
-				return nil
-			})
-		}
-		err = executor.Wait()
-		if err != nil {
-			return err
-		}
+	moduleVersions, err := discoverModVersionsFromDirs(append(srcs, getModCaches()...), nixBuildCores)
+	if err != nil {
+		return fmt.Errorf("Error loading module versions: %w", err)
 	}
 
-	// Create nix-support dir
-	err = os.MkdirAll(nixSupport, 0755)
-	if err != nil {
+	executor := parexec.NewParExecutor(nixBuildCores)
+	for _, srcDir := range srcs {
+		executor.Go(func() error {
+			err := copyDir(srcDir, modCacheDir, "*.mod", moduleVersions)
+			if err != nil {
+				return fmt.Errorf("error copying %s to %s: %v", srcDir, modCacheDir, err)
+			}
+			return nil
+		})
+	}
+	if err = executor.Wait(); err != nil {
+		return err
+	}
+
+	// Create nix-support/gobuild-nix dir
+	if err = os.MkdirAll(modCacheDir, 0755); err != nil {
 		return err
 	}
 
@@ -390,19 +401,87 @@ func buildModCacheOutputSetupHook() error {
 	}
 	defer file.Close()
 
-	for _, goModCacheDir := range goModCacheDirs {
-		_, err = fmt.Fprintf(file, "addToSearchPath NIX_GOBUILD_MODCACHE '%s'", goModCacheDir)
-		if err != nil {
-			return err
-		}
+	_, err = fmt.Fprintf(file, "addToSearchPath NIX_GOBUILD_MODCACHE '%s'", modCacheDir)
+	if err != nil {
+		return err
+	}
 
-		_, err = file.Write([]byte("\n"))
-		if err != nil {
-			return err
-		}
+	_, err = file.Write([]byte("\n"))
+	if err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func linkRecursiveFlat(dst string, sources []string) error {
+	type foundFile struct {
+		path  string
+		isDir bool
+	}
+
+	var recurse func(string, []string) error
+	recurse = func(target string, inputs []string) error {
+		if err := os.MkdirAll(target, 0755); err != nil {
+			return fmt.Errorf("error creating %s: %w", target, err)
+		}
+
+		foundFiles := map[string][]*foundFile{}
+		for _, input := range inputs {
+			entries, err := os.ReadDir(input)
+			if err != nil {
+				return fmt.Errorf("error listing %s: %w", input, err)
+			}
+
+			for _, entry := range entries {
+				name := entry.Name()
+				foundFiles[name] = append(foundFiles[name], &foundFile{
+					path:  filepath.Join(input, name),
+					isDir: entry.IsDir(),
+				})
+			}
+		}
+
+		for name, files := range foundFiles {
+			if len(files) > 1 {
+				if files[0].isDir {
+					nonDirs := []*foundFile{}
+					for _, file := range files {
+						if !file.isDir {
+							nonDirs = append(nonDirs, file)
+						}
+					}
+
+					if len(nonDirs) > 0 {
+						errorMessage := fmt.Sprintf("Found both directory & non directory sources for %s:\n", filepath.Join(target, name))
+						for _, file := range files {
+							errorMessage += fmt.Sprintf("- %s (%t)\n", file.path, file.isDir)
+						}
+						return errors.New(errorMessage)
+					} else {
+						childInputs := make([]string, len(files))
+						for i, file := range files {
+							childInputs[i] = file.path
+						}
+						if err := recurse(filepath.Join(target, name), childInputs); err != nil {
+							return err
+						}
+						continue
+					}
+				}
+			}
+
+			from := filepath.Join(files[0].path)
+			to := filepath.Join(target, name)
+			if err := os.Symlink(from, to); err != nil {
+				return fmt.Errorf("error symlinking %s -> %s: %w", from, to, err)
+			}
+		}
+
+		return nil
+	}
+
+	return recurse(dst, sources)
 }
 
 func unpackGo() error {
@@ -418,12 +497,15 @@ func unpackGo() error {
 	// Combined list of all mod caches
 	modcacheDirs := append(proxySrcs, modCaches...)
 
-	// Unpack module proxy dirs into ~/go
-	// While I'd _love_ a flat layout like lndir we can't have that with Go because
-	// the compiler doesn't traverse into directory symlinks
-	goModVersions, err := modcache.LinkRecursive(filepath.Join("go", "pkg", "mod"), modcacheDirs, nixBuildCores)
+	moduleVersions, err := discoverModVersionsFromDirs(modcacheDirs, nixBuildCores)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error loading module versions: %w", err)
+	}
+
+	// Symlink modcache dirs into ~/go
+	err = linkRecursiveFlat(filepath.Join("go", "pkg", "mod"), modcacheDirs)
+	if err != nil {
+		return fmt.Errorf("error symlinking sources: %w", err)
 	}
 
 	// Unpack "local" package or create an intermediate package
@@ -432,9 +514,33 @@ func unpackGo() error {
 		// If we're only building Go proxy sources create a dummy intermediate module that we can build inside.
 		srcDir, ok := os.LookupEnv("src")
 		if ok && fileExists(filepath.Join(srcDir, "go.mod")) || fileExists(filepath.Join(srcDir, "go.work")) {
-			err = copyDir(srcDir, SRC_DIR, goModVersions)
+			err = copyDir(srcDir, SRC_DIR, "go.mod", moduleVersions)
 			if err != nil {
 				return err
+			}
+
+			// Go mod download local dependencies only if we're in a local tree
+			modPath := filepath.Join(SRC_DIR, "go.mod")
+			if fileExists(modPath) {
+				mod, err := readMod(modPath)
+				if err != nil {
+					return err
+				}
+
+				require := make([]string, len(mod.Require))
+				for i, req := range mod.Require {
+					require[i] = req.Mod.Path
+				}
+
+				cmd := exec.Command("go", append([]string{"mod", "download"}, require...)...)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				cmd.Dir = SRC_DIR
+				if err = cmd.Run(); err != nil {
+					return err
+				}
+			} else {
+				panic("TODO: Recurse into local go.work")
 			}
 		} else { // No local package, create dummy package
 			err = os.Mkdir(SRC_DIR, 0777)
@@ -454,7 +560,7 @@ func unpackGo() error {
 				return err
 			}
 
-			for path, version := range goModVersions {
+			for path, version := range moduleVersions {
 				err = mod.AddRequire(path, version)
 				if err != nil {
 					return err
@@ -470,18 +576,25 @@ func unpackGo() error {
 			if err != nil {
 				return err
 			}
-		}
 
-		{
-			args := append([]string{"mod", "download"}, slices.Collect(maps.Keys(goModVersions))...)
-			cmd := exec.Command("go", args...)
-			cmd.Dir = SRC_DIR
-			cmd.Stderr = os.Stderr
-			cmd.Stdout = os.Stdout
-			err = cmd.Run()
-			if err != nil {
-				return err
+			var downloadModules func([]string)
+			downloadModules = func(goPackages []string) {
+				args := append([]string{"mod", "download"}, goPackages...)
+				cmd := exec.Command("go", args...)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				cmd.Dir = SRC_DIR
+				err = cmd.Run()
+
+				// Run command and retry each half separately
+				if cmd.Run() != nil && len(goPackages) > 1 {
+					split := len(goPackages) / 2
+					downloadModules(goPackages[:split])
+					downloadModules(goPackages[split:])
+				}
 			}
+
+			downloadModules(slices.Collect(maps.Keys(moduleVersions)))
 		}
 	}
 

@@ -15,6 +15,7 @@ in
     };
     preConfigure = ''
       rm go.sum
+      sed -i s/'^go .*$'/'go ${go.version}'/ go.mod
       export HOME=$TMPDIR
       mkdir -p $HOME/go/pkg/mod
       ln -s ${mod}/* $HOME/go/pkg/mod/

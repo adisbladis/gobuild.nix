@@ -3,20 +3,20 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/BurntSushi/toml"
 	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/semver"
 	"golang.org/x/sync/errgroup"
 
 	_ "embed"
@@ -25,16 +25,7 @@ import (
 const SCHEMA_VERSION = 1
 const LOCK_FILE = "gobuild-nix.lock"
 
-type goModDownload struct {
-	Path     string
-	Version  string
-	Info     string
-	GoMod    string
-	Zip      string
-	Dir      string
-	Sum      string
-	GoModSum string
-}
+var SumFiles = []string{"go.sum", "go.work.sum"}
 
 type goPackageLock struct {
 	Version string   `toml:"version"`
@@ -50,20 +41,17 @@ type lockFile struct {
 	Require []string                  `toml:"require"`
 }
 
-func filter[T any](slice []T, predicate func(T) bool) []T {
-	var result []T
-	for _, v := range slice {
-		if predicate(v) {
-			result = append(result, v)
-		}
-	}
-	return result
-}
-
 //go:embed fetcher.nix
 var fetcherExpr string
 
 func createLock(directory string, workers int, pkgsFlag string, attrFlag string) (*lockFile, error) {
+	var lockMux sync.Mutex
+	lock := &lockFile{
+		Schema: SCHEMA_VERSION,
+		Locked: make(map[string]*goPackageLock),
+		Cycles: make(map[string]int),
+	}
+
 	// If we have a previous lock file re-use hashes instead of re-computing them if the package/version is the same
 	prevHashes := make(map[string]string)
 	if _, err := os.Stat(filepath.Join(directory, LOCK_FILE)); err == nil {
@@ -81,50 +69,93 @@ func createLock(directory string, workers int, pkgsFlag string, attrFlag string)
 		}
 	}
 
-	var modDownloads []*goModDownload
+	// Get all packages by reading go.sum
+	sumVersions := map[string]string{}
 	{
-		log.Println("Downloading dependencies")
+		var sumFile *os.File
+		var sumPath string
+		sumVersionsTemp := map[string][]string{}
 
-		cmd := exec.Command(
-			"go", "mod", "download", "--json",
-		)
-		cmd.Dir = directory
-		stdout, err := cmd.Output()
-		if err != nil {
-			if exiterr, ok := err.(*exec.ExitError); ok {
-				return nil, fmt.Errorf("failed to run 'go mod download --json: %s\n%s", exiterr, exiterr.Stderr)
-			} else {
-				return nil, fmt.Errorf("failed to run 'go mod download --json': %s", err)
-			}
-		}
-
-		dec := json.NewDecoder(bytes.NewReader(stdout))
-		for {
-			var dl *goModDownload
-			err := dec.Decode(&dl)
-			if err == io.EOF {
+		found := false
+		for _, sumFileName := range SumFiles {
+			sumPath = filepath.Join(directory, sumFileName)
+			_, err := os.Stat(sumPath)
+			if err == nil {
+				found = true
+				sumFile, err = os.Open(sumPath)
+				if err != nil {
+					return nil, fmt.Errorf("error opening %s: %w", sumPath, err)
+				}
+				defer sumFile.Close()
 				break
 			}
-			modDownloads = append(modDownloads, dl)
 		}
 
-		log.Println("Done downloading dependencies")
+		if !found {
+			return nil, fmt.Errorf("neither go.sum nor go.work.sum was found in '%s'", directory)
+		}
+
+		scanner := bufio.NewScanner(sumFile)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				continue
+			}
+
+			fields := strings.Fields(line)
+			if len(fields) != 3 {
+				return nil, fmt.Errorf("error while reading %s: wrong number of fields %d", sumPath, len(fields))
+			}
+
+			packagePath := fields[0]
+			version := fields[1]
+
+			// Some indirect dependencies only specify their mod files in go.sum, but we need to download it anyway
+			// Slice of the /go.mod suffix & add it to the list for comparison
+			idx := strings.Index(version, "/")
+			if idx > -1 {
+				version = version[:idx]
+			}
+
+			sumVersionsTemp[packagePath] = append(sumVersionsTemp[packagePath], version)
+		}
+
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("error while scanning '%s': %w", sumPath, err)
+		}
+
+		for packagePath, versions := range sumVersionsTemp {
+			slices.SortFunc(versions, func(a, b string) int {
+				return semver.Compare(a, b)
+			})
+			sumVersions[packagePath] = versions[len(versions)-1]
+		}
 	}
 
-	var lockMux sync.Mutex
-	lock := &lockFile{
-		Schema: SCHEMA_VERSION,
-		Locked: make(map[string]*goPackageLock),
-		Cycles: make(map[string]int),
+	log.Println("Downloading initial dependencies")
+	modDownloads, err := downloadModules(directory, []string{})
+	if err != nil {
+		return nil, err
 	}
+	for _, download := range modDownloads {
+		lock.Require = append(lock.Require, download.Path)
+	}
+
+	log.Println("Done downloading initial dependencies")
+
+	log.Println("Discovering dependencies")
+	modDownloads, err = discoverDependencies(directory, workers, sumVersions)
+	if err != nil {
+		return nil, err
+	}
+	log.Println("Done discovering dependencies")
+
 
 	expr := fmt.Sprintf("(with import %s { }; callPackage (%s) { go = pkgs.\"%s\"; }).fetchModuleProxy", pkgsFlag, fetcherExpr, attrFlag)
 
 	eg := errgroup.Group{}
 	eg.SetLimit(workers)
 	for _, download := range modDownloads {
-		lock.Require = append(lock.Require, download.Path)
-
 		eg.Go(func() error {
 			var require []string
 			{
@@ -218,12 +249,12 @@ func createLock(directory string, workers int, pkgsFlag string, attrFlag string)
 						}
 					}
 					if finderState != SpecifiedHash {
-						return fmt.Errorf("Hash mismatch pattern not found in stream")
+						return fmt.Errorf("error prefetching %s: hash mismatch pattern not found in stream", download.Path)
 					}
 				}
 
 				if err := scanner.Err(); err != nil {
-					fmt.Println("Error reading from stdout:", err)
+					return fmt.Errorf("error prefetching %s: error reading from stdout: %w", download.Path, err)
 				}
 
 				cmd.Wait()
@@ -241,21 +272,9 @@ func createLock(directory string, workers int, pkgsFlag string, attrFlag string)
 		})
 	}
 
-	err := eg.Wait()
+	err = eg.Wait()
 	if err != nil {
 		return nil, err
-	}
-
-	// The require list contains modules that are not
-	// in our graph.
-	// These are optional dependencies not used by the module we're generating for.
-	//
-	// Filter out unsatisfied requirements
-	for _, locked := range lock.Locked {
-		locked.Require = filter(locked.Require, func(requirement string) bool {
-			_, ok := lock.Locked[requirement]
-			return ok
-		})
 	}
 
 	for i, cycle := range findAllCycles(lock.Locked) {

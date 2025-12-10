@@ -19,15 +19,19 @@ func NewParExecutor(workers int) *ParExecutor {
 }
 
 func (e *ParExecutor) Go(fn func() error) {
-	e.wg.Go(func() {
+	e.wg.Add(1)
+	go func() {
 		e.sem <- struct{}{}
-		defer func() { <-e.sem }()
+		defer func() {
+			<-e.sem
+			e.wg.Done()
+		}()
 		if err := fn(); err != nil {
 			e.errOnce.Do(func() {
 				e.errChan <- err
 			})
 		}
-	})
+	}()
 }
 
 func (e *ParExecutor) Wait() error {
