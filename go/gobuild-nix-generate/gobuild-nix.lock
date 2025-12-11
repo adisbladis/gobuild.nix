@@ -1,55 +1,13 @@
 schema = 1
-require = ["github.com/BurntSushi/toml", "golang.org/x/mod", "golang.org/x/sync"]
-
-[cycles]
-  "golang.org/x/crypto" = 0
-  "golang.org/x/mod" = 0
-  "golang.org/x/net" = 0
-  "golang.org/x/telemetry" = 0
-  "golang.org/x/text" = 0
-  "golang.org/x/tools" = 0
 
 [locked]
   [locked."github.com/BurntSushi/toml"]
     version = "v1.5.0"
     hash = "sha256-SyKVqkZQopsYprjWCVssulTGQ/NUrrztdzsl02Bsg7Q="
-  [locked."github.com/google/go-cmp"]
-    version = "v0.6.0"
-    hash = "sha256-cTZvg6svBSFLdmNinaT4HPL9cfPeeDSPItHIpK8sijo="
-  [locked."github.com/yuin/goldmark"]
-    version = "v1.4.13"
-    hash = "sha256-gbmz7XQm9GgNDmC7SSPd9QAdKI3fGHQNWto3WR4pWlI="
-  [locked."golang.org/x/crypto"]
-    version = "v0.43.0"
-    hash = "sha256-ZBMachasMBLHjsU4HPy68wvHO6Y7hV5BnvTSMBY+VDM="
-    require = ["golang.org/x/net", "golang.org/x/sys", "golang.org/x/term", "golang.org/x/text"]
   [locked."golang.org/x/mod"]
     version = "v0.30.0"
     hash = "sha256-dEjRvA/ak+JgGyfQ3jzMc/uiznogPtqv2j+C6xJASqU="
     require = ["golang.org/x/tools"]
-  [locked."golang.org/x/net"]
-    version = "v0.46.0"
-    hash = "sha256-htixoCv4MuxZFRz5nCnDbDfEo1oVoWze0fYDji213cs="
-    require = ["golang.org/x/crypto", "golang.org/x/sys", "golang.org/x/term", "golang.org/x/text"]
   [locked."golang.org/x/sync"]
     version = "v0.18.0"
     hash = "sha256-Zm4eHAVpxplyeLW55l6JYcHFEEZgfp8WMQt5+Q7LF8o="
-  [locked."golang.org/x/sys"]
-    version = "v0.37.0"
-    hash = "sha256-/MX5ilknF6lyaRMO5hxSvr9J2bBhNP7D+3dzzfXbx0M="
-  [locked."golang.org/x/telemetry"]
-    version = "v0.0.0-20251008203120-078029d740a8"
-    hash = "sha256-Yxd8cbhA2ckEe0+DspQFS9iW0WpXEfr2wjn4lzk33Ok="
-    require = ["golang.org/x/mod", "golang.org/x/sync", "golang.org/x/sys"]
-  [locked."golang.org/x/term"]
-    version = "v0.36.0"
-    hash = "sha256-ca10B3VAScoKzxPLtacQpkkpve8KEznjqMsBY1qqVKg="
-    require = ["golang.org/x/sys"]
-  [locked."golang.org/x/text"]
-    version = "v0.30.0"
-    hash = "sha256-Z7udpwFbQF1nDGY892lP/XdKRq8JtBQeYpGXNMs85S4="
-    require = ["golang.org/x/tools", "golang.org/x/mod", "golang.org/x/sync"]
-  [locked."golang.org/x/tools"]
-    version = "v0.38.0"
-    hash = "sha256-AHKhWy0pE37H9myBZc/JjZpyMSEy7/9XcL/40it+C+Q="
-    require = ["github.com/google/go-cmp", "github.com/yuin/goldmark", "golang.org/x/mod", "golang.org/x/net", "golang.org/x/sync", "golang.org/x/telemetry", "golang.org/x/sys"]

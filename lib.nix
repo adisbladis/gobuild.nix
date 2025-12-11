@@ -62,7 +62,7 @@ in
                       let
                         locked = lockFile.locked.${goPackagePath};
                       in
-                      concatMap (req: if elem req cycle then [ ] else if ! final ? ${req} then (builtins.trace req [ ]) else [ final.${req} ]) (locked.require or [ ])
+                      concatMap (req: if elem req cycle then [ ] else [ final.${req} ]) (locked.require or [ ])
                     ) cycle;
 
                   }
@@ -79,8 +79,6 @@ in
         in
         {
           inherit cycles;
-
-          require = map (packagePath: final.${packagePath}) lockFile.require;
         }
         // mapAttrs (
           goPackagePath: locked:

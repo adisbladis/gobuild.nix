@@ -35,14 +35,23 @@ type goPackageLock struct {
 
 // Map goPackagePath -> lock entry
 type lockFile struct {
-	Schema  int                       `toml:"schema"`
-	Cycles  map[string]int            `toml:"cycles,omitempty"`
-	Locked  map[string]*goPackageLock `toml:"locked"`
-	Require []string                  `toml:"require"`
+	Schema int                       `toml:"schema"`
+	Cycles map[string]int            `toml:"cycles,omitempty"`
+	Locked map[string]*goPackageLock `toml:"locked"`
 }
 
 //go:embed fetcher.nix
 var fetcherExpr string
+
+func filter[T any](slice []T, predicate func(T) bool) []T {
+	var result []T
+	for _, v := range slice {
+		if predicate(v) {
+			result = append(result, v)
+		}
+	}
+	return result
+}
 
 func createLock(directory string, workers int, pkgsFlag string, attrFlag string) (*lockFile, error) {
 	var lockMux sync.Mutex
@@ -132,24 +141,12 @@ func createLock(directory string, workers int, pkgsFlag string, attrFlag string)
 		}
 	}
 
-	log.Println("Downloading initial dependencies")
+	log.Println("Discovering dependencies")
 	modDownloads, err := downloadModules(directory, []string{})
 	if err != nil {
 		return nil, err
 	}
-	for _, download := range modDownloads {
-		lock.Require = append(lock.Require, download.Path)
-	}
-
-	log.Println("Done downloading initial dependencies")
-
-	log.Println("Discovering dependencies")
-	modDownloads, err = discoverDependencies(directory, workers, sumVersions)
-	if err != nil {
-		return nil, err
-	}
 	log.Println("Done discovering dependencies")
-
 
 	expr := fmt.Sprintf("(with import %s { }; callPackage (%s) { go = pkgs.\"%s\"; }).fetchModuleProxy", pkgsFlag, fetcherExpr, attrFlag)
 
@@ -275,6 +272,18 @@ func createLock(directory string, workers int, pkgsFlag string, attrFlag string)
 	err = eg.Wait()
 	if err != nil {
 		return nil, err
+	}
+
+	// The require list contains modules that are not
+	// in our graph.
+	// These are optional dependencies not used by the module we're generating for.
+	//
+	// Filter out unsatisfied requirements
+	for _, locked := range lock.Locked {
+		locked.Require = filter(locked.Require, func(requirement string) bool {
+			_, ok := lock.Locked[requirement]
+			return ok
+		})
 	}
 
 	for i, cycle := range findAllCycles(lock.Locked) {

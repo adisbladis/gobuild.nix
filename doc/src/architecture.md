@@ -41,10 +41,3 @@ When creating the module cache directory all `*.mod` files have to be patched & 
 
 To be more efficient this patching happens at _dependency build time_ and is written to the store as a build output.
 When the module cache is "unpacked" it's symlinked in a structure which is as flat as possible.
-
-### Deeply nested indirect dependencies
-
-Because we're building each package in isolation and go.sum doesn't hold the full dependency graph, only the that your application/library cares about.
-Without including deeply nested indirect dependencies an application build will fail because the Go compiler needs to be able to look up metadata about it's dependencies, even if those are not required to actually perform the build.
-
-Therefore the lock file generator discovers additional deeply nested dependencies not present in `go.sum` during generation.
