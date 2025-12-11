@@ -39,12 +39,8 @@ This means we always have to write out all dependencies to the lock.
 
 When creating the module cache directory all `*.mod` files have to be patched & all `go.sum` files have to be omitted from the file tree.
 
-While it may be tempting to create a flat symlink structure (like `lndir`) this is not possible because Go doesn't traverse into packages where the directory is a symlink.
-So one symlink per input file is created when unpacking the module cache.
-
-This approach causes a downstream knock-on effect which is that Go embed statements don't consider files that are symlinks.
-
-That's why `gobuild.nix` unpacks the module cache using a hybrid approach: create one symlink per source file & copy every non-Go file in full.
+To be more efficient this patching happens at _dependency build time_ and is written to the store as a build output.
+When the module cache is "unpacked" it's symlinked in a structure which is as flat as possible.
 
 ### Deeply nested indirect dependencies
 
