@@ -4,8 +4,6 @@ let
     fromTOML
     readFile
     concatMap
-    elem
-    groupBy
     attrNames
     mapAttrs
     genericClosure
@@ -35,95 +33,46 @@ in
         let
           cycles = lockFile.cycles or { };
 
-          # Cycle packages by their group IDs
-          cyclesByGroup =
-            mapAttrs
-              (
-                cycleIdx: cycle:
-                final.callPackage (
-                  {
-                    stdenv,
-                    fetchers,
-                    hooks,
-                  }:
-                  stdenv.mkDerivation {
-                    name = "go-cycle-${cycleIdx}";
+          # Single derivation that bundles all external modules together.
+          allModules = final.callPackage (
+            {
+              stdenv,
+              fetchers,
+              hooks,
+            }:
+            stdenv.mkDerivation {
+              name = "go-all-modules";
 
-                    srcs = map (
-                      goPackagePath:
-                      let
-                        locked = lockFile.locked.${goPackagePath};
-                      in
-                      fetchers.fetchModuleProxy {
-                        inherit goPackagePath;
-                        inherit (locked) version hash;
-                      }
-                    ) cycle;
+              srcs = map (
+                goPackagePath:
+                let
+                  locked = lockFile.locked.${goPackagePath};
+                in
+                fetchers.fetchModuleProxy {
+                  inherit goPackagePath;
+                  inherit (locked) version hash;
+                }
+              ) (attrNames lockFile.locked);
 
-                    nativeBuildInputs = [
-                      hooks.goModuleHook
-                    ];
+              nativeBuildInputs = [
+                hooks.goModuleHook
+              ];
 
-                    propagatedBuildInputs = concatMap (
-                      goPackagePath:
-                      let
-                        locked = lockFile.locked.${goPackagePath};
-                      in
-                      concatMap (req: if elem req cycle then [ ] else [ final.${req} ]) (locked.require or [ ])
-                    ) cycle;
-
-                  }
-                ) { }
-              )
-              (
-                # Attrset of cycles by their numeric group -> list of members
-                groupBy (n: toString cycles.${n}) (attrNames cycles)
-              );
-
-          # Map goPackagePath -> cycle package
-          cyclePkgs = mapAttrs (goPackagePath: cycleGroup: cyclesByGroup.${toString cycleGroup}) final.cycles;
+              dontUseGoBuild = "1";
+              dontUseGoCacheOutputSetupHook = "1";
+            }
+          ) { };
 
         in
         {
           inherit cycles;
 
-          require = map (goPackagePath: final.${goPackagePath}) (attrNames lockFile.locked);
+          require = [ final.allModules ];
+
+          allModules = allModules;
         }
         //
-          # Create a package per Go _module_
-          mapAttrs (
-            goPackagePath: locked:
-            cyclePkgs.${goPackagePath} or (final.callPackage (
-              {
-                stdenv,
-                fetchers,
-                hooks,
-              }:
-              stdenv.mkDerivation {
-                name = goPackagePath;
-                inherit (locked) version;
-
-                src = fetchers.fetchModuleProxy {
-                  inherit goPackagePath;
-                  inherit (locked) version hash;
-                };
-
-                passthru = {
-                  inherit cycles;
-                  inherit cyclePkgs;
-                };
-
-                nativeBuildInputs = [
-                  hooks.goModuleHook
-                ];
-
-                propagatedBuildInputs = map (depGoPackagePath: final.${depGoPackagePath} or null) (
-                  locked.require or [ ]
-                );
-
-              }
-            ) { })
-          ) lockFile.locked
+          mapAttrs (_goPackagePath: _locked: allModules) lockFile.locked
         //
           # Create a package per local Go _package_
           mapAttrs (
