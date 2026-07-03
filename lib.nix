@@ -9,11 +9,8 @@ let
     attrNames
     mapAttrs
     genericClosure
-    pathExists
     ;
   lockSchemaVersion = 1;
-
-  optionalFile = filepath: if pathExists filepath then [ filepath ] else [ ];
 
 in
 {
@@ -153,16 +150,10 @@ in
                   name = goPackagePath;
 
                   # Create a union of all required local sources
-                  src = lib.fileset.toSource {
-                    root = rootDir;
-                    fileset = (
-                      lib.fileset.unions (
-                        (optionalFile (rootDir + "/go.mod"))
-                        ++ (optionalFile (rootDir + "/go.work"))
-                        ++ map (dir: rootDir + dir) dirs
-                      )
-                    );
-                  };
+                  src = lib.sources.sourceByGlobs rootDir [
+                    "go.mod"
+                    "go.work.sum"
+                  ] ++ map (dir: "${dir}/**") dirs;
 
                   # Only build the current Go package
                   env.goBuildPackages = goPackagePath + "/...";
