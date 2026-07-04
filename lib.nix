@@ -150,10 +150,10 @@ in
                   name = goPackagePath;
 
                   # Create a union of all required local sources
-                  src = lib.sources.sourceByGlobs rootDir [
+                  src = lib.sources.sourceByGlobs rootDir ([
                     "go.mod"
                     "go.work.sum"
-                  ] ++ map (dir: "${dir}/**") dirs;
+                  ] ++ map (dir: "${dir}/**") dirs);
 
                   # Only build the current Go package
                   env.goBuildPackages = goPackagePath + "/...";
